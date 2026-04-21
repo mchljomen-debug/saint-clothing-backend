@@ -2,7 +2,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import validator from "validator";
 import userModel from "../models/userModel.js";
-import OtpModel from "../models/OtpModel.js";
+import OtpModel from "../models/otpModel.js";
 import policyModel from "../models/policyModel.js";
 import { sendOTP } from "../utils/sendOtp.js";
 import path from "path";
