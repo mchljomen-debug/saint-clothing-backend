@@ -5,9 +5,8 @@ import userModel from "../models/userModel.js";
 import OtpModel from "../models/otpModel.js";
 import policyModel from "../models/policyModel.js";
 import { sendOTP } from "../utils/sendOtp.js";
-import path from "path";
-import fs from "fs";
 import { addLog } from "../utils/activityLogger.js";
+import uploadBufferToCloudinary from "../utils/cloudinaryUpload.js";
 
 const createToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "1d" });
@@ -654,16 +653,12 @@ export const updateUserProfile = async (req, res) => {
     if (address !== undefined) user.address = normalizeAddress(address);
 
     if (req.file) {
-      if (user.avatar) {
-        const normalizedAvatar = String(user.avatar).replace(/^\/+/, "");
-        const oldPath = path.join(process.cwd(), normalizedAvatar);
+      const uploadedAvatar = await uploadBufferToCloudinary(
+        req.file.buffer,
+        "saint-clothing/avatars"
+      );
 
-        if (fs.existsSync(oldPath)) {
-          fs.unlinkSync(oldPath);
-        }
-      }
-
-      user.avatar = `/uploads/avatars/${req.file.filename}`;
+      user.avatar = uploadedAvatar.secure_url;
     }
 
     user.lastSeenAt = new Date();
