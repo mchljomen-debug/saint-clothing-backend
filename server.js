@@ -49,6 +49,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:8081",
   "https://saint-clothing-frontend.vercel.app",
+  "https://saint-clothing-admin.vercel.app",
 ];
 
 app.use(
@@ -60,15 +61,14 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      console.log("Blocked by CORS:", origin);
+      return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "token"],
   })
 );
-
-app.options("*", cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
