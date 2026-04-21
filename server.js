@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import connectDB from "./config/mongodb.js";
+import connectCloudinary from "./config/cloudinary.js";
 
 import heroRouter from "./routes/heroRoute.js";
 import userRouter from "./routes/userRoute.js";
@@ -25,8 +26,7 @@ const port = process.env.PORT || 4000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// These can stay for things like payment proofs or legacy files,
-// but product images / avatars should now use Cloudinary.
+// These can stay for payment proofs / hero / legacy local files
 const uploadsDir = path.join(__dirname, "uploads");
 const paymentProofsDir = path.join(__dirname, "uploads", "payment-proofs");
 const avatarsDir = path.join(__dirname, "uploads", "avatars");
@@ -146,6 +146,7 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     await connectDB();
+    await connectCloudinary();
 
     app.listen(port, "0.0.0.0", () => {
       console.log(`Server running on port ${port}`);
