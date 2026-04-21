@@ -25,9 +25,6 @@ const port = process.env.PORT || 4000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// use your current PC LAN IP here
-const localIP = "192.168.254.101";
-
 const uploadsDir = path.join(__dirname, "uploads");
 const paymentProofsDir = path.join(__dirname, "uploads", "payment-proofs");
 const avatarsDir = path.join(__dirname, "uploads", "avatars");
@@ -46,9 +43,24 @@ if (!fs.existsSync(heroDir)) {
   fs.mkdirSync(heroDir, { recursive: true });
 }
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+  "https://saint-clothing-frontend.vercel.app",
+];
+
 app.use(
   cors({
-    origin: true,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "token"],
@@ -122,9 +134,7 @@ const startServer = async () => {
     await connectDB();
 
     app.listen(port, "0.0.0.0", () => {
-      console.log("Server running on:");
-      console.log(`- Local:   http://localhost:${port}`);
-      console.log(`- Network: http://${localIP}:${port}`);
+      console.log(`Server running on port ${port}`);
     });
   } catch (error) {
     console.log("SERVER START ERROR:", error.message);
