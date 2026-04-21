@@ -4,7 +4,6 @@ import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import mongoose from "mongoose";
 import { addLog, getActorName } from "../utils/activityLogger.js";
-import uploadBufferToCloudinary from "../utils/cloudinaryUpload.js";
 
 // ==============================
 // HELPERS
@@ -68,9 +67,7 @@ const parseArrayField = (value, fallback = []) => {
 };
 
 const formatProductName = (product) =>
-  `${product?.name || "Unknown Product"}${
-    product?.sku ? ` (${product.sku})` : ""
-  }`;
+  `${product?.name || "Unknown Product"}${product?.sku ? ` (${product.sku})` : ""}`;
 
 const resolveBranchCode = async (req, requestedBranch) => {
   if (!isAdmin(req)) {
@@ -101,23 +98,6 @@ const resolveBranchCode = async (req, requestedBranch) => {
   }
 
   return existingBranch.code;
-};
-
-const uploadSingleIfExists = async (file, folder) => {
-  if (!file?.buffer) return "";
-  const result = await uploadBufferToCloudinary(file.buffer, folder);
-  return result.secure_url;
-};
-
-const normalizeStockObject = (stock = {}) => {
-  const normalizedStock = {};
-
-  Object.keys(stock || {}).forEach((key) => {
-    const upperKey = String(key || "").trim().toUpperCase();
-    normalizedStock[upperKey] = Math.max(0, Number(stock[key]) || 0);
-  });
-
-  return normalizedStock;
 };
 
 // ==============================
@@ -172,59 +152,19 @@ const addProduct = async (req, res) => {
     const finalBranch = await resolveBranchCode(req, branch);
 
     const images = [];
+    if (req.files?.image1?.[0]) images.push(req.files.image1[0].filename);
+    if (req.files?.image2?.[0]) images.push(req.files.image2[0].filename);
+    if (req.files?.image3?.[0]) images.push(req.files.image3[0].filename);
+    if (req.files?.image4?.[0]) images.push(req.files.image4[0].filename);
 
-    if (req.files?.image1?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image1[0],
-        "saint-clothing/products"
-      );
-      if (url) images.push(url);
-    }
-
-    if (req.files?.image2?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image2[0],
-        "saint-clothing/products"
-      );
-      if (url) images.push(url);
-    }
-
-    if (req.files?.image3?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image3[0],
-        "saint-clothing/products"
-      );
-      if (url) images.push(url);
-    }
-
-    if (req.files?.image4?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image4[0],
-        "saint-clothing/products"
-      );
-      if (url) images.push(url);
-    }
-
-    const model3d = req.files?.model3d?.[0]
-      ? await uploadSingleIfExists(
-          req.files.model3d[0],
-          "saint-clothing/models"
-        )
-      : "";
+    const model3d = req.files?.model3d?.[0]?.filename || "";
 
     const finalOnSale = parseBoolean(onSale, false);
     const finalSalePercent = finalOnSale ? clampSalePercent(salePercent) : 0;
 
     const parsedStock =
       typeof stock === "string" ? JSON.parse(stock) : stock || {};
-
-    const sizeChartImage = req.files?.sizeChartImage?.[0]
-      ? await uploadSingleIfExists(
-          req.files.sizeChartImage[0],
-          "saint-clothing/size-charts"
-        )
-      : "";
-
+    const sizeChartImage = req.files?.sizeChartImage?.[0]?.filename || "";
     const product = new Product({
       name: String(name).trim(),
       sku: String(sku).trim(),
@@ -237,7 +177,7 @@ const addProduct = async (req, res) => {
       bestseller: parseBoolean(bestseller, false),
       newArrival: parseBoolean(newArrival, false),
       sizes: parseArrayField(sizes, []),
-      stock: normalizeStockObject(parsedStock),
+      stock: parsedStock,
       colors: parseArrayField(colors, []),
       images,
       sizeChartImage,
@@ -255,9 +195,7 @@ const addProduct = async (req, res) => {
 
     await addLog({
       action: "PRODUCT_CREATED",
-      message: `Product created: ${formatProductName(product)} in ${
-        product.branch
-      }`,
+      message: `Product created: ${formatProductName(product)} in ${product.branch}`,
       user: getActorName(req, "Admin"),
       entityId: product._id,
       entityType: "Product",
@@ -397,53 +335,34 @@ const updateProduct = async (req, res) => {
 
     const updateData = {};
 
-    if (req.body.name !== undefined)
-      updateData.name = String(req.body.name).trim();
-
-    if (req.body.sku !== undefined)
-      updateData.sku = String(req.body.sku).trim();
-
+    if (req.body.name !== undefined) updateData.name = String(req.body.name).trim();
+    if (req.body.sku !== undefined) updateData.sku = String(req.body.sku).trim();
     if (req.body.groupCode !== undefined)
       updateData.groupCode = String(req.body.groupCode).trim();
-
     if (req.body.color !== undefined) updateData.color = req.body.color;
     if (req.body.colorHex !== undefined) updateData.colorHex = req.body.colorHex;
-    if (req.body.description !== undefined)
-      updateData.description = req.body.description;
+    if (req.body.description !== undefined) updateData.description = req.body.description;
     if (req.body.category !== undefined) updateData.category = req.body.category;
 
     if (req.body.price !== undefined) {
       updateData.price = parseNumber(req.body.price, existingProduct.price);
     }
-
     if (req.files?.sizeChartImage?.[0]) {
-      updateData.sizeChartImage = await uploadSingleIfExists(
-        req.files.sizeChartImage[0],
-        "saint-clothing/size-charts"
-      );
+      updateData.sizeChartImage = req.files.sizeChartImage[0].filename;
     }
-
     if (req.body.sizes !== undefined) {
-      updateData.sizes = parseArrayField(
-        req.body.sizes,
-        existingProduct.sizes || []
-      );
+      updateData.sizes = parseArrayField(req.body.sizes, existingProduct.sizes || []);
     }
 
     if (req.body.stock !== undefined) {
-      const parsedStock =
+      updateData.stock =
         typeof req.body.stock === "string"
           ? JSON.parse(req.body.stock)
           : req.body.stock;
-
-      updateData.stock = normalizeStockObject(parsedStock);
     }
 
     if (req.body.colors !== undefined) {
-      updateData.colors = parseArrayField(
-        req.body.colors,
-        existingProduct.colors || []
-      );
+      updateData.colors = parseArrayField(req.body.colors, existingProduct.colors || []);
     }
 
     if (req.body.bestseller !== undefined) {
@@ -503,48 +422,17 @@ const updateProduct = async (req, res) => {
     }
 
     const newImages = [];
-
-    if (req.files?.image1?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image1[0],
-        "saint-clothing/products"
-      );
-      if (url) newImages.push(url);
-    }
-
-    if (req.files?.image2?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image2[0],
-        "saint-clothing/products"
-      );
-      if (url) newImages.push(url);
-    }
-
-    if (req.files?.image3?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image3[0],
-        "saint-clothing/products"
-      );
-      if (url) newImages.push(url);
-    }
-
-    if (req.files?.image4?.[0]) {
-      const url = await uploadSingleIfExists(
-        req.files.image4[0],
-        "saint-clothing/products"
-      );
-      if (url) newImages.push(url);
-    }
+    if (req.files?.image1?.[0]) newImages.push(req.files.image1[0].filename);
+    if (req.files?.image2?.[0]) newImages.push(req.files.image2[0].filename);
+    if (req.files?.image3?.[0]) newImages.push(req.files.image3[0].filename);
+    if (req.files?.image4?.[0]) newImages.push(req.files.image4[0].filename);
 
     if (newImages.length > 0) {
       updateData.images = newImages;
     }
 
     if (req.files?.model3d?.[0]) {
-      updateData.model3d = await uploadSingleIfExists(
-        req.files.model3d[0],
-        "saint-clothing/models"
-      );
+      updateData.model3d = req.files.model3d[0].filename;
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
@@ -554,9 +442,7 @@ const updateProduct = async (req, res) => {
 
     await addLog({
       action: "PRODUCT_UPDATED",
-      message: `Product updated: ${formatProductName(updatedProduct)} in ${
-        updatedProduct.branch
-      }`,
+      message: `Product updated: ${formatProductName(updatedProduct)} in ${updatedProduct.branch}`,
       user: getActorName(req, "Admin"),
       entityId: updatedProduct._id,
       entityType: "Product",
@@ -771,7 +657,7 @@ const updateStock = async (req, res) => {
       });
     }
 
-    product.stock = normalizeStockObject(stock || {});
+    product.stock = stock || {};
     await product.save();
 
     await addLog({
@@ -840,14 +726,12 @@ const deductStock = async (req, res) => {
       const sizeKey = String(size || "").toUpperCase();
       const currentQty = Number(product.stock.get(sizeKey) || 0);
 
-      product.stock.set(sizeKey, Math.max(0, currentQty - Number(quantity)));
+      product.stock.set(sizeKey, currentQty - Number(quantity));
       await product.save();
 
       await addLog({
         action: "PRODUCT_STOCK_DEDUCTED",
-        message: `Stock deducted: ${product.name} (${sizeKey}) -${Number(
-          quantity
-        )}`,
+        message: `Stock deducted: ${product.name} (${sizeKey}) -${Number(quantity)}`,
         user: getActorName(req, "System"),
         entityId: product._id,
         entityType: "Product",
