@@ -1,7 +1,9 @@
 import express from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 import authUser from "../middleware/auth.js";
-import upload from "../middleware/multer.js";
 import {
   checkEmail,
   sendOtpController,
@@ -19,6 +21,23 @@ import {
 } from "../controllers/userController.js";
 
 const userRouter = express.Router();
+
+const avatarDir = path.join(process.cwd(), "uploads", "avatars");
+if (!fs.existsSync(avatarDir)) {
+  fs.mkdirSync(avatarDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, avatarDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname || ".jpg");
+    cb(null, `avatar-${Date.now()}${ext}`);
+  },
+});
+
+const upload = multer({ storage });
 
 userRouter.get("/terms", getTermsAndConditions);
 

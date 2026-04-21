@@ -21,17 +21,33 @@ import authUser from "../middleware/auth.js";
 
 const router = express.Router();
 
-const productUpload = upload.fields([
-  { name: "image1", maxCount: 1 },
-  { name: "image2", maxCount: 1 },
-  { name: "image3", maxCount: 1 },
-  { name: "image4", maxCount: 1 },
-  { name: "sizeChartImage", maxCount: 1 },
-  { name: "model3d", maxCount: 1 },
-]);
+router.post(
+  "/add",
+  adminAuth,
+  upload.fields([
+    { name: "image1", maxCount: 1 },
+    { name: "image2", maxCount: 1 },
+    { name: "image3", maxCount: 1 },
+    { name: "image4", maxCount: 1 },
+    { name: "sizeChartImage", maxCount: 1 },
+    { name: "model3d", maxCount: 1 },
+  ]),
+  addProduct
+);
 
-router.post("/add", adminAuth, productUpload, addProduct);
-router.put("/update/:id", adminAuth, productUpload, updateProduct);
+router.put(
+  "/update/:id",
+  adminAuth,
+  upload.fields([
+    { name: "image1", maxCount: 1 },
+    { name: "image2", maxCount: 1 },
+    { name: "image3", maxCount: 1 },
+    { name: "image4", maxCount: 1 },
+    { name: "sizeChartImage", maxCount: 1 },
+    { name: "model3d", maxCount: 1 },
+  ]),
+  updateProduct
+);
 
 router.put("/update-stock/:id", adminAuth, updateStock);
 router.post("/deduct-stock", deductStock);
