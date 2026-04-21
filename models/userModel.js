@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+/* =========================
+   ADDRESS SCHEMA
+========================= */
 const addressSchema = new mongoose.Schema(
   {
     houseUnit: { type: String, default: "" },
@@ -22,6 +25,9 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/* =========================
+   STYLE PREFERENCES (AI / Tracking)
+========================= */
 const stylePreferencesSchema = new mongoose.Schema(
   {
     favoriteCategories: {
@@ -36,25 +42,32 @@ const stylePreferencesSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-    recentViewedProducts: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "product",
-      default: [],
-    },
-    recentCartProducts: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "product",
-      default: [],
-    },
-    recentOrderedProducts: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "product",
-      default: [],
-    },
+
+    recentViewedProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "product",
+      },
+    ],
+    recentCartProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "product",
+      },
+    ],
+    recentOrderedProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "product",
+      },
+    ],
   },
   { _id: false }
 );
 
+/* =========================
+   USER PREFERENCES (UI Settings)
+========================= */
 const preferencesSchema = new mongoose.Schema(
   {
     favoriteCategories: {
@@ -85,31 +98,47 @@ const preferencesSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/* =========================
+   MAIN USER SCHEMA
+========================= */
 const userSchema = new mongoose.Schema(
   {
+    /* BASIC INFO */
     firstName: { type: String, default: "" },
     lastName: { type: String, default: "" },
+
+    // Optional combined name
     name: { type: String, default: "" },
 
     email: { type: String, required: true, unique: true },
     password: { type: String },
 
-    avatar: { type: String, default: "" },
+    /* PROFILE IMAGE (Cloudinary URL) */
+    avatar: {
+      type: String,
+      default: "", // will store full Cloudinary URL
+    },
 
     phone: { type: String, default: "" },
-    address: { type: addressSchema, default: () => ({}) },
+    address: {
+      type: addressSchema,
+      default: () => ({}),
+    },
 
+    /* AUTH / SECURITY */
     isVerified: { type: Boolean, default: false },
     otpExpires: { type: Date },
 
     resetPasswordOtp: { type: String, default: "" },
     resetPasswordExpires: { type: Date, default: null },
 
+    /* CART */
     cartData: {
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
 
+    /* PERSONALIZATION */
     stylePreferences: {
       type: stylePreferencesSchema,
       default: () => ({
@@ -134,6 +163,7 @@ const userSchema = new mongoose.Schema(
       }),
     },
 
+    /* TERMS */
     termsAccepted: {
       type: Boolean,
       default: false,
@@ -143,6 +173,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    /* ACCOUNT STATUS */
     isBlocked: {
       type: Boolean,
       default: false,
@@ -170,6 +201,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    /* ACTIVITY */
     lastLoginAt: {
       type: Date,
       default: null,
@@ -179,9 +211,16 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true, minimize: false }
+  {
+    timestamps: true,
+    minimize: false,
+  }
 );
 
-const userModel = mongoose.models.User || mongoose.model("User", userSchema);
+/* =========================
+   EXPORT MODEL
+========================= */
+const userModel =
+  mongoose.models.User || mongoose.model("User", userSchema);
 
 export default userModel;
