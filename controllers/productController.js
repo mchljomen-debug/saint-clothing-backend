@@ -109,6 +109,17 @@ const uploadSingleIfExists = async (file, folder) => {
   return result.secure_url;
 };
 
+const normalizeStockObject = (stock = {}) => {
+  const normalizedStock = {};
+
+  Object.keys(stock || {}).forEach((key) => {
+    const upperKey = String(key || "").trim().toUpperCase();
+    normalizedStock[upperKey] = Math.max(0, Number(stock[key]) || 0);
+  });
+
+  return normalizedStock;
+};
+
 // ==============================
 // ADD PRODUCT
 // ==============================
@@ -226,7 +237,7 @@ const addProduct = async (req, res) => {
       bestseller: parseBoolean(bestseller, false),
       newArrival: parseBoolean(newArrival, false),
       sizes: parseArrayField(sizes, []),
-      stock: parsedStock,
+      stock: normalizeStockObject(parsedStock),
       colors: parseArrayField(colors, []),
       images,
       sizeChartImage,
@@ -420,10 +431,12 @@ const updateProduct = async (req, res) => {
     }
 
     if (req.body.stock !== undefined) {
-      updateData.stock =
+      const parsedStock =
         typeof req.body.stock === "string"
           ? JSON.parse(req.body.stock)
           : req.body.stock;
+
+      updateData.stock = normalizeStockObject(parsedStock);
     }
 
     if (req.body.colors !== undefined) {
@@ -758,7 +771,7 @@ const updateStock = async (req, res) => {
       });
     }
 
-    product.stock = stock || {};
+    product.stock = normalizeStockObject(stock || {});
     await product.save();
 
     await addLog({
@@ -827,7 +840,7 @@ const deductStock = async (req, res) => {
       const sizeKey = String(size || "").toUpperCase();
       const currentQty = Number(product.stock.get(sizeKey) || 0);
 
-      product.stock.set(sizeKey, currentQty - Number(quantity));
+      product.stock.set(sizeKey, Math.max(0, currentQty - Number(quantity)));
       await product.save();
 
       await addLog({
