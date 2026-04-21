@@ -25,6 +25,8 @@ const port = process.env.PORT || 4000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// These can stay for things like payment proofs or legacy files,
+// but product images / avatars should now use Cloudinary.
 const uploadsDir = path.join(__dirname, "uploads");
 const paymentProofsDir = path.join(__dirname, "uploads", "payment-proofs");
 const avatarsDir = path.join(__dirname, "uploads", "avatars");
@@ -50,25 +52,29 @@ const allowedOrigins = [
   "http://localhost:8081",
   "https://saint-clothing-frontend.vercel.app",
   "https://saint-clothing-admin.vercel.app",
-];
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_URL,
+].filter(Boolean);
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests like Postman, server-to-server, curl
+    if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      console.log("Blocked by CORS:", origin);
-      return callback(null, false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "token"],
-  })
-);
+    console.log("Blocked by CORS:", origin);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "token"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -124,6 +130,14 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.log("SERVER ERROR:", err);
+
+  if (err.message && err.message.startsWith("CORS blocked for origin:")) {
+    return res.status(403).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
   res.status(500).json({
     success: false,
     message: err.message || "Internal Server Error",
