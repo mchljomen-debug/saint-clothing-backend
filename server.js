@@ -58,7 +58,6 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests like Postman, server-to-server, curl
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
