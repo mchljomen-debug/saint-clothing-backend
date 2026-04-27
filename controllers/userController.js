@@ -579,6 +579,9 @@ export const updateUserProfile = async (req, res) => {
     const userId = req.params.userId;
     const authUserId = req.userId || req.body.userId;
 
+    console.log("PROFILE UPDATE BODY:", req.body);
+    console.log("PROFILE UPDATE FILE:", req.file);
+
     if (!authUserId || String(authUserId) !== String(userId)) {
       return res.status(403).json({
         success: false,
@@ -649,16 +652,32 @@ export const updateUserProfile = async (req, res) => {
     }
 
     if (email !== undefined) user.email = String(email).trim().toLowerCase();
-    if (phone !== undefined) user.phone = phone;
+    if (phone !== undefined) user.phone = String(phone).trim();
     if (address !== undefined) user.address = normalizeAddress(address);
 
-    if (req.file) {
+    let fileBuffer = null;
+
+    if (req.file?.buffer) {
+      fileBuffer = req.file.buffer;
+    }
+
+    if (!fileBuffer && req.files?.avatar?.[0]?.buffer) {
+      fileBuffer = req.files.avatar[0].buffer;
+    }
+
+    if (fileBuffer) {
+      console.log("AVATAR RECEIVED. UPLOADING TO CLOUDINARY...");
+
       const uploadedAvatar = await uploadBufferToCloudinary(
-        req.file.buffer,
+        fileBuffer,
         "saint-clothing/avatars"
       );
 
+      console.log("CLOUDINARY AVATAR URL:", uploadedAvatar.secure_url);
+
       user.avatar = uploadedAvatar.secure_url;
+    } else {
+      console.log("NO AVATAR FILE RECEIVED");
     }
 
     user.lastSeenAt = new Date();
