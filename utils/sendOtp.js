@@ -10,43 +10,46 @@ export const sendOTP = async (email, otp) => {
   });
 
   const htmlContent = `
-    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f9f9f9; padding: 40px 0; color: #0A0D17;">
-      <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-top: 4px solid #ED3500; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+    <div style="font-family: Helvetica, Arial, sans-serif; background-color: #F8F8F6; padding: 40px 0; color: #111111;">
+      <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-top: 4px solid #111111; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
         
-        <div style="padding: 30px; text-align: center; background-color: #0A0D17;">
-          <h1 style="color: #ffffff; font-size: 18px; font-weight: 900; letter-spacing: 2px; margin: 0; text-transform: uppercase; font-style: italic;">
-            System <span style="color: #ED3500;">Authentication</span>
+        <div style="padding: 30px; text-align: center; background-color: #111111;">
+          <h1 style="color: #ffffff; font-size: 20px; font-weight: 900; letter-spacing: 4px; margin: 0; text-transform: uppercase;">
+            SAINT
           </h1>
+          <p style="color: #BDBDBD; font-size: 10px; font-weight: 700; letter-spacing: 2px; margin: 8px 0 0; text-transform: uppercase;">
+            Clothing Account Verification
+          </p>
         </div>
 
         <div style="padding: 40px 30px; text-align: center;">
-          <p style="font-size: 12px; font-weight: bold; color: #999; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px;">
-            Security Access Protocol
+          <p style="font-size: 11px; font-weight: bold; color: #999999; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px;">
+            Verification Code
           </p>
-          <h2 style="font-size: 16px; font-weight: 700; color: #0A0D17; margin-bottom: 25px;">
-            Verify Your Personnel Identity
+
+          <h2 style="font-size: 17px; font-weight: 800; color: #111111; margin-bottom: 25px;">
+            Confirm Your Identity
           </h2>
           
-          <div style="background-color: #F4F7FF; border: 1px dashed #1055C9; padding: 20px; margin: 20px 0; border-radius: 4px;">
-            <span style="font-size: 32px; font-weight: 900; color: #1055C9; letter-spacing: 10px; font-family: monospace;">
+          <div style="background-color: #FAFAF8; border: 1px dashed #111111; padding: 22px; margin: 20px 0; border-radius: 8px;">
+            <span style="font-size: 34px; font-weight: 900; color: #111111; letter-spacing: 10px; font-family: monospace;">
               ${otp}
             </span>
           </div>
 
-          <p style="font-size: 13px; color: #555; line-height: 1.6;">
-            This One-Time Password (OTP) is valid for <strong>1 minute</strong>.<br/>
-            Input this code into the telemetry dashboard to finalize your session.
+          <p style="font-size: 13px; color: #555555; line-height: 1.6;">
+            This One-Time Password is valid for <strong>1 minute</strong>.<br/>
+            Enter this code to continue your Saint Clothing session.
           </p>
           
-          <p style="font-size: 11px; color: #ED3500; font-weight: bold; margin-top: 30px; text-transform: uppercase; font-style: italic;">
-            Notice: Do not share this sequence with unauthorized personnel.
+          <p style="font-size: 11px; color: #111111; font-weight: bold; margin-top: 30px; text-transform: uppercase;">
+            Do not share this code with anyone.
           </p>
         </div>
 
-        {/* Footer */}
-        <div style="padding: 20px; background-color: #f4f4f4; text-align: center; border-top: 1px solid #eeeeee;">
-          <p style="font-size: 10px; color: #aaa; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin: 0;">
-            THE PADDOCK // AUTOMATED DISPATCH SYSTEM
+        <div style="padding: 20px; background-color: #F4F4F4; text-align: center; border-top: 1px solid #eeeeee;">
+          <p style="font-size: 10px; color: #999999; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin: 0;">
+            SAINT CLOTHING // AUTOMATED VERIFICATION
           </p>
         </div>
       </div>
@@ -54,9 +57,9 @@ export const sendOTP = async (email, otp) => {
   `;
 
   await transporter.sendMail({
-    from: `"Paddock System" <${process.env.GMAIL_USER}>`,
+    from: `"Saint Clothing" <${process.env.GMAIL_USER}>`,
     to: email,
-    subject: `ACCESS CODE: ${otp} - Verification Required`,
+    subject: `SAINT Verification Code: ${otp}`,
     html: htmlContent,
   });
 };
