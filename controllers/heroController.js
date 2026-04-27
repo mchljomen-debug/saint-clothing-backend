@@ -1,4 +1,5 @@
 import heroModel from "../models/heroModel.js";
+import { cloudinary } from "../config/cloudinary.js";
 
 const defaultSlides = [
   {
@@ -29,6 +30,23 @@ const defaultSlides = [
     image: "",
   },
 ];
+
+const uploadToCloudinary = (file) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: "saint-clothing/hero",
+        resource_type: "image",
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+
+    stream.end(file.buffer);
+  });
+};
 
 export const getHero = async (req, res) => {
   try {
@@ -81,19 +99,23 @@ export const updateHero = async (req, res) => {
     };
 
     const incomingSlides = safeJsonParse(body.slides, []);
-    const tickerEnabled =
-      body.tickerEnabled === "true" || body.tickerEnabled === true;
-    const tickerText = body.tickerText || "";
-
     const oldSlides = Array.isArray(hero.slides) ? hero.slides : defaultSlides;
 
-    const mergedSlides = [0, 1, 2].map((index) => {
+    const mergedSlides = [];
+
+    for (let index = 0; index < 3; index++) {
       const oldSlide = oldSlides[index] || defaultSlides[index];
       const incoming = incomingSlides[index] || {};
       const fileKey = `image${index + 1}`;
       const uploadedFile = files[fileKey]?.[0];
 
-      return {
+      let imageUrl = incoming.image ?? oldSlide.image ?? "";
+
+      if (uploadedFile) {
+        imageUrl = await uploadToCloudinary(uploadedFile);
+      }
+
+      mergedSlides.push({
         title: incoming.title ?? oldSlide.title ?? "",
         subtitle: incoming.subtitle ?? oldSlide.subtitle ?? "",
         description: incoming.description ?? oldSlide.description ?? "",
@@ -101,14 +123,17 @@ export const updateHero = async (req, res) => {
         action: ["collection", "bestseller", "latest"].includes(incoming.action)
           ? incoming.action
           : oldSlide.action || "collection",
-        image: uploadedFile
-          ? `/uploads/hero/${uploadedFile.filename}`
-          : incoming.image ?? oldSlide.image ?? "",
-      };
-    });
+        image: imageUrl,
+      });
+    }
 
-    hero.tickerEnabled = tickerEnabled;
-    hero.tickerText = tickerText;
+    hero.tickerEnabled =
+      body.tickerEnabled === "true" || body.tickerEnabled === true;
+
+    hero.tickerText =
+      body.tickerText ||
+      "Welcome back, {name}! Ready to explore the latest from Saint Clothing?";
+
     hero.slides = mergedSlides;
 
     await hero.save();
@@ -119,10 +144,10 @@ export const updateHero = async (req, res) => {
       hero,
     });
   } catch (error) {
-    console.log("UPDATE HERO ERROR:", error.message);
+    console.log("UPDATE HERO ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to update hero",
+      message: error.message || "Failed to update hero",
     });
   }
 };

@@ -62,4 +62,4 @@ const heroSchema = new mongoose.Schema(
 
 const heroModel = mongoose.models.hero || mongoose.model("hero", heroSchema);
 
-export default heroModel;
+export default heroModel; 
