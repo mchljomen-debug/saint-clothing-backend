@@ -26,6 +26,7 @@ const productUpload = upload.fields([
   { name: "image3", maxCount: 1 },
   { name: "image4", maxCount: 1 },
   { name: "sizeChartImage", maxCount: 1 },
+  { name: "model3d", maxCount: 1 },
 ]);
 
 router.post("/add", adminAuth, productUpload, addProduct);
