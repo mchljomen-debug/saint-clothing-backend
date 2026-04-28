@@ -68,8 +68,7 @@ const parseArrayField = (value, fallback = []) => {
 };
 
 const formatProductName = (product) =>
-  `${product?.name || "Unknown Product"}${
-    product?.sku ? ` (${product.sku})` : ""
+  `${product?.name || "Unknown Product"}${product?.sku ? ` (${product.sku})` : ""
   }`;
 
 const resolveBranchCode = async (req, requestedBranch) => {
@@ -194,12 +193,7 @@ const addProduct = async (req, res) => {
       if (url) images.push(url);
     }
 
-    const model3d = req.files?.model3d?.[0]
-      ? await uploadSingleIfExists(
-          req.files.model3d[0],
-          "saint-clothing/models"
-        )
-      : "";
+    const model3d = req.body.model3d || "";
 
     const finalOnSale = parseBoolean(onSale, false);
     const finalSalePercent = finalOnSale ? clampSalePercent(salePercent) : 0;
@@ -209,9 +203,9 @@ const addProduct = async (req, res) => {
 
     const sizeChartImage = req.files?.sizeChartImage?.[0]
       ? await uploadSingleIfExists(
-          req.files.sizeChartImage[0],
-          "saint-clothing/size-charts"
-        )
+        req.files.sizeChartImage[0],
+        "saint-clothing/size-charts"
+      )
       : "";
 
     const product = new Product({
@@ -244,9 +238,8 @@ const addProduct = async (req, res) => {
 
     await addLog({
       action: "PRODUCT_CREATED",
-      message: `Product created: ${formatProductName(product)} in ${
-        product.branch
-      }`,
+      message: `Product created: ${formatProductName(product)} in ${product.branch
+        }`,
       user: getActorName(req, "Admin"),
       entityId: product._id,
       entityType: "Product",
@@ -527,11 +520,8 @@ const updateProduct = async (req, res) => {
       updateData.images = newImages;
     }
 
-    if (req.files?.model3d?.[0]) {
-      updateData.model3d = await uploadSingleIfExists(
-        req.files.model3d[0],
-        "saint-clothing/models"
-      );
+    if (req.body.model3d !== undefined) {
+      updateData.model3d = req.body.model3d || "";
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
@@ -541,9 +531,8 @@ const updateProduct = async (req, res) => {
 
     await addLog({
       action: "PRODUCT_UPDATED",
-      message: `Product updated: ${formatProductName(updatedProduct)} in ${
-        updatedProduct.branch
-      }`,
+      message: `Product updated: ${formatProductName(updatedProduct)} in ${updatedProduct.branch
+        }`,
       user: getActorName(req, "Admin"),
       entityId: updatedProduct._id,
       entityType: "Product",
