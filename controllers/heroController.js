@@ -14,8 +14,7 @@ const defaultSlides = [
   {
     title: "Core Uniform",
     subtitle: "Minimal Pieces. Strong Identity.",
-    description:
-      "Everyday essentials refined for a sharper streetwear identity.",
+    description: "Everyday essentials refined for a sharper streetwear identity.",
     cta: "View Best Sellers",
     action: "bestseller",
     image: "",
@@ -55,16 +54,15 @@ export const getHero = async (req, res) => {
     if (!hero) {
       hero = await heroModel.create({
         tickerEnabled: true,
+        newUserGreeting: "Welcome",
+        returningUserGreeting: "Welcome back",
         tickerText:
-          "Welcome back, {name}! Ready to explore the latest from Saint Clothing?",
+          "{greeting}, {name}! Ready to explore the latest from Saint Clothing?",
         slides: defaultSlides,
       });
     }
 
-    return res.json({
-      success: true,
-      hero,
-    });
+    return res.json({ success: true, hero });
   } catch (error) {
     console.log("GET HERO ERROR:", error.message);
     return res.status(500).json({
@@ -81,8 +79,10 @@ export const updateHero = async (req, res) => {
     if (!hero) {
       hero = new heroModel({
         tickerEnabled: true,
+        newUserGreeting: "Welcome",
+        returningUserGreeting: "Welcome back",
         tickerText:
-          "Welcome back, {name}! Ready to explore the latest from Saint Clothing?",
+          "{greeting}, {name}! Ready to explore the latest from Saint Clothing?",
         slides: defaultSlides,
       });
     }
@@ -130,9 +130,12 @@ export const updateHero = async (req, res) => {
     hero.tickerEnabled =
       body.tickerEnabled === "true" || body.tickerEnabled === true;
 
+    hero.newUserGreeting = body.newUserGreeting || "Welcome";
+    hero.returningUserGreeting = body.returningUserGreeting || "Welcome back";
+
     hero.tickerText =
       body.tickerText ||
-      "Welcome back, {name}! Ready to explore the latest from Saint Clothing?";
+      "{greeting}, {name}! Ready to explore the latest from Saint Clothing?";
 
     hero.slides = mergedSlides;
 
