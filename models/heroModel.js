@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+/* =========================
+   HERO SLIDE SCHEMA
+========================= */
 const heroSlideSchema = new mongoose.Schema(
   {
     title: { type: String, default: "" },
@@ -16,14 +19,37 @@ const heroSlideSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/* =========================
+   HERO MAIN SCHEMA
+========================= */
 const heroSchema = new mongoose.Schema(
   {
-    tickerEnabled: { type: Boolean, default: true },
+    /* TOGGLE TICKER */
+    tickerEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
+    /* ✅ NEW USER GREETING */
+    newUserGreeting: {
+      type: String,
+      default: "Welcome",
+    },
+
+    /* ✅ RETURNING USER GREETING */
+    returningUserGreeting: {
+      type: String,
+      default: "Welcome back",
+    },
+
+    /* ✅ DYNAMIC TICKER TEXT */
     tickerText: {
       type: String,
       default:
-        "Welcome back, {name}! Ready to explore the latest from Saint Clothing?",
+        "{greeting}, {name}! Ready to explore the latest from Saint Clothing?",
     },
+
+    /* HERO SLIDES */
     slides: {
       type: [heroSlideSchema],
       default: [
@@ -38,7 +64,7 @@ const heroSchema = new mongoose.Schema(
         },
         {
           title: "Core Uniform",
-          subtitle: "Minimal Pieces. Strong Identity.",
+          subtitle: "Minimal Pieces. Strong Identity",
           description:
             "Everyday essentials refined for a sharper streetwear identity.",
           cta: "View Best Sellers",
@@ -57,9 +83,15 @@ const heroSchema = new mongoose.Schema(
       ],
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-const heroModel = mongoose.models.hero || mongoose.model("hero", heroSchema);
+/* =========================
+   EXPORT MODEL
+========================= */
+const heroModel =
+  mongoose.models.hero || mongoose.model("hero", heroSchema);
 
-export default heroModel; 
+export default heroModel;
