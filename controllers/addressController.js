@@ -3,12 +3,46 @@ import axios from "axios";
 const PSGC_CLOUD = "https://psgc.cloud/api";
 const PSGC_CLOUD_V2 = "https://psgc.cloud/api/v2";
 
+/* =========================
+   NORMALIZER (VERY IMPORTANT FIX)
+========================= */
 const normalizeList = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+    ? payload.data
+    : [];
+
+  return list
+    .map((item) => ({
+      code: String(
+        item?.code ||
+          item?.psgcCode ||
+          item?.psgc_id ||
+          item?.id ||
+          item?.region_code ||
+          item?.province_code ||
+          item?.city_code ||
+          item?.municipality_code ||
+          ""
+      ),
+      name: String(
+        item?.name ||
+          item?.regionName ||
+          item?.provinceName ||
+          item?.cityName ||
+          item?.municipalityName ||
+          item?.cityMunicipalityName ||
+          item?.area_name ||
+          ""
+      ),
+    }))
+    .filter((item) => item.code && item.name);
 };
 
+/* =========================
+   REGIONS
+========================= */
 export const getRegions = async (req, res) => {
   try {
     const response = await axios.get(`${PSGC_CLOUD}/regions`);
@@ -26,6 +60,9 @@ export const getRegions = async (req, res) => {
   }
 };
 
+/* =========================
+   PROVINCES
+========================= */
 export const getProvinces = async (req, res) => {
   try {
     const { reg } = req.query;
@@ -54,11 +91,14 @@ export const getProvinces = async (req, res) => {
   }
 };
 
+/* =========================
+   CITIES / MUNICIPALITIES
+========================= */
 export const getMunicipalities = async (req, res) => {
   try {
     const { reg, prv } = req.query;
 
-    // NCR has no province layer, so fetch directly from region
+    // NCR special case (no province)
     if (reg === "1300000000") {
       const response = await axios.get(
         `${PSGC_CLOUD_V2}/regions/${encodeURIComponent(reg)}/cities-municipalities`
@@ -97,6 +137,9 @@ export const getMunicipalities = async (req, res) => {
   }
 };
 
+/* =========================
+   BARANGAYS
+========================= */
 export const getBarangays = async (req, res) => {
   try {
     const { mun } = req.query;
@@ -125,6 +168,9 @@ export const getBarangays = async (req, res) => {
   }
 };
 
+/* =========================
+   REVERSE GEOCODE
+========================= */
 export const reverseGeocode = async (req, res) => {
   try {
     const { lat, lon } = req.query;
