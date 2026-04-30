@@ -1,4 +1,5 @@
 import categoryModel from "../models/categoryModel.js";
+import uploadBufferToCloudinary from "../utils/cloudinaryUpload.js";
 
 const DEFAULT_CATEGORIES = [
   "Tshirt",
@@ -10,6 +11,17 @@ const DEFAULT_CATEGORIES = [
 
 const escapeRegex = (text) => {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+const uploadCategoryImage = async (file) => {
+  if (!file?.buffer) return "";
+
+  const result = await uploadBufferToCloudinary(
+    file.buffer,
+    "saint-clothing/categories"
+  );
+
+  return result.secure_url;
 };
 
 export const seedDefaultCategories = async () => {
@@ -65,6 +77,11 @@ export const addCategory = async (req, res) => {
     if (exists) {
       if (!exists.isActive) {
         exists.isActive = true;
+
+        if (req.file) {
+          exists.image = await uploadCategoryImage(req.file);
+        }
+
         await exists.save();
 
         return res.json({
@@ -80,8 +97,11 @@ export const addCategory = async (req, res) => {
       });
     }
 
+    const image = req.file ? await uploadCategoryImage(req.file) : "";
+
     const category = await categoryModel.create({
       name: cleanName,
+      image,
     });
 
     res.json({
@@ -91,6 +111,54 @@ export const addCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("ADD CATEGORY ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const updateCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    const updateData = {};
+
+    if (name !== undefined) {
+      if (!name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Category name is required",
+        });
+      }
+
+      updateData.name = name.trim();
+    }
+
+    if (req.file) {
+      updateData.image = await uploadCategoryImage(req.file);
+    }
+
+    const category = await categoryModel.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Category updated",
+      category,
+    });
+  } catch (error) {
+    console.error("UPDATE CATEGORY ERROR:", error);
     res.status(500).json({
       success: false,
       message: error.message,
