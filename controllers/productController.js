@@ -4,7 +4,9 @@ import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import mongoose from "mongoose";
 import { addLog, getActorName } from "../utils/activityLogger.js";
-import uploadBufferToCloudinary from "../utils/cloudinaryUpload.js";
+import uploadBufferToCloudinary, {
+  uploadProductImageToCloudinary,
+} from "../utils/cloudinaryUpload.js";
 
 // ==============================
 // HELPERS
@@ -109,9 +111,17 @@ const resolveBranchCode = async (req, requestedBranch) => {
   return existingBranch.code;
 };
 
-const uploadSingleIfExists = async (file, folder) => {
+const uploadSingleIfExists = async (
+  file,
+  folder,
+  removeBackground = false
+) => {
   if (!file?.buffer) return "";
-  const result = await uploadBufferToCloudinary(file.buffer, folder);
+
+  const result = removeBackground
+    ? await uploadProductImageToCloudinary(file.buffer, folder)
+    : await uploadBufferToCloudinary(file.buffer, folder);
+
   return result.secure_url;
 };
 
@@ -172,7 +182,8 @@ const addProduct = async (req, res) => {
     if (req.files?.image1?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image1[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) images.push(url);
     }
@@ -180,7 +191,8 @@ const addProduct = async (req, res) => {
     if (req.files?.image2?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image2[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) images.push(url);
     }
@@ -188,7 +200,8 @@ const addProduct = async (req, res) => {
     if (req.files?.image3?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image3[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) images.push(url);
     }
@@ -196,7 +209,8 @@ const addProduct = async (req, res) => {
     if (req.files?.image4?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image4[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) images.push(url);
     }
@@ -511,7 +525,8 @@ const updateProduct = async (req, res) => {
     if (req.files?.image1?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image1[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) newImages.push(url);
     }
@@ -519,7 +534,8 @@ const updateProduct = async (req, res) => {
     if (req.files?.image2?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image2[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) newImages.push(url);
     }
@@ -527,7 +543,8 @@ const updateProduct = async (req, res) => {
     if (req.files?.image3?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image3[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) newImages.push(url);
     }
@@ -535,7 +552,8 @@ const updateProduct = async (req, res) => {
     if (req.files?.image4?.[0]) {
       const url = await uploadSingleIfExists(
         req.files.image4[0],
-        "saint-clothing/products"
+        "saint-clothing/products",
+        true
       );
       if (url) newImages.push(url);
     }

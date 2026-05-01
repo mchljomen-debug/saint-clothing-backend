@@ -1,22 +1,51 @@
 import { v2 as cloudinary } from "cloudinary";
+import streamifier from "streamifier";
 
-const connectCloudinary = async () => {
-  if (
-    !process.env.CLOUDINARY_NAME ||
-    !process.env.CLOUDINARY_API_KEY ||
-    !process.env.CLOUDINARY_SECRET_KEY
-  ) {
-    throw new Error("Cloudinary env variables are missing");
-  }
+/* NORMAL UPLOAD - use for size chart, 3D model, banners, etc. */
+const uploadBufferToCloudinary = (buffer, folder) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: "auto",
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary Normal Upload Error:", error);
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
 
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_SECRET_KEY,
+    streamifier.createReadStream(buffer).pipe(stream);
   });
-
-  console.log("Cloudinary connected");
 };
 
-export default connectCloudinary;
-export { cloudinary };
+/* PRODUCT IMAGE ONLY - auto background removal */
+export const uploadProductImageToCloudinary = (buffer, folder) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: "image",
+        background_removal: "cloudinary_ai",
+        format: "png",
+        quality: "auto",
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary Product Image Upload Error:", error);
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
+
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+};
+
+export default uploadBufferToCloudinary;
