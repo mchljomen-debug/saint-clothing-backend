@@ -14,6 +14,7 @@ import {
   addReview,
   canUserReviewProduct,
 } from "../controllers/productController.js";
+
 import upload from "../middleware/multer.js";
 import adminAuth from "../middleware/adminAuth.js";
 import authUser from "../middleware/auth.js";
@@ -29,19 +30,26 @@ const productUpload = upload.fields([
   { name: "model3d", maxCount: 1 },
 ]);
 
+// ADD / UPDATE PRODUCT
 router.post("/add", adminAuth, productUpload, addProduct);
 router.put("/update/:id", adminAuth, productUpload, updateProduct);
 
+// STOCK
 router.put("/update-stock/:id", adminAuth, updateStock);
 router.post("/deduct-stock", deductStock);
 
+// PUBLIC PRODUCT
 router.get("/single/:id", getSingleProduct);
+router.get("/list", listProducts);
+
+// REVIEWS
 router.get("/can-review/:id", authUser, canUserReviewProduct);
 router.post("/review/:id", authUser, addReview);
 
-router.get("/list", listProducts);
+// ADMIN PRODUCT
 router.get("/admin-list", adminAuth, listAdminProducts);
 
+// TRASH / DELETE
 router.post("/remove", adminAuth, deleteProduct);
 router.post("/restore", adminAuth, restoreProduct);
 router.post("/permanent-delete", adminAuth, permanentDelete);

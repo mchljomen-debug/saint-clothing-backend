@@ -16,16 +16,18 @@ const productSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
     price: { type: Number, required: true },
+
     image: { type: String, default: "" },
     images: [{ type: String }],
 
     sizeChartImage: { type: String, default: "" },
-
     model3d: { type: String, default: "" },
 
     category: { type: String, required: true, trim: true },
     subCategory: { type: String, default: "" },
+
     sizes: [{ type: String }],
+
     bestseller: { type: Boolean, default: false },
     newArrival: { type: Boolean, default: false },
     onSale: { type: Boolean, default: false },
@@ -44,6 +46,7 @@ const productSchema = new mongoose.Schema(
     },
 
     isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
 
     stock: {
       type: Map,
@@ -57,14 +60,23 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: "Regular",
     },
+
     styleVibe: {
       type: String,
       default: "Streetwear",
     },
+
+    recommendationSection: {
+      type: String,
+      enum: ["top", "bottom", "both", "none"],
+      default: "none",
+    },
+
     styleTags: {
       type: [String],
       default: [],
     },
+
     matchWith: {
       type: [String],
       default: [],

@@ -67,6 +67,12 @@ const parseArrayField = (value, fallback = []) => {
   }
 };
 
+const normalizeRecommendationSection = (value) => {
+  const allowed = ["top", "bottom", "both", "none"];
+  const normalized = String(value || "none").trim().toLowerCase();
+  return allowed.includes(normalized) ? normalized : "none";
+};
+
 const formatProductName = (product) =>
   `${product?.name || "Unknown Product"}${
     product?.sku ? ` (${product.sku})` : ""
@@ -133,6 +139,7 @@ const addProduct = async (req, res) => {
       salePercent,
       fitType,
       styleVibe,
+      recommendationSection,
       styleTags,
       matchWith,
     } = req.body;
@@ -236,6 +243,9 @@ const addProduct = async (req, res) => {
       branch: finalBranch,
       fitType: fitType || "Regular",
       styleVibe: styleVibe || "Streetwear",
+      recommendationSection: normalizeRecommendationSection(
+        recommendationSection
+      ),
       styleTags: parseArrayField(styleTags, []),
       matchWith: parseArrayField(matchWith, []),
     });
@@ -467,12 +477,19 @@ const updateProduct = async (req, res) => {
     }
 
     if (req.body.fitType !== undefined) {
-      updateData.fitType = req.body.fitType || existingProduct.fitType || "Regular";
+      updateData.fitType =
+        req.body.fitType || existingProduct.fitType || "Regular";
     }
 
     if (req.body.styleVibe !== undefined) {
       updateData.styleVibe =
         req.body.styleVibe || existingProduct.styleVibe || "Streetwear";
+    }
+
+    if (req.body.recommendationSection !== undefined) {
+      updateData.recommendationSection = normalizeRecommendationSection(
+        req.body.recommendationSection
+      );
     }
 
     if (req.body.styleTags !== undefined) {
