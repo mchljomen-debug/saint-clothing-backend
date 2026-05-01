@@ -218,6 +218,8 @@ export const sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
 
+    console.log("SEND OTP REQUEST EMAIL:", email);
+
     if (!validator.isEmail(email)) {
       return res.status(400).json({
         success: false,
@@ -261,7 +263,7 @@ export const sendOtpController = async (req, res) => {
       message: "OTP sent (valid 1 min)",
     });
   } catch (err) {
-    console.log("SEND OTP ERROR:", err);
+    console.log("SEND OTP ERROR:", err.message);
     return res.status(500).json({
       success: false,
       message: err.message,
