@@ -24,7 +24,7 @@ const uploadBufferToCloudinary = (fileBuffer, folder = "saint-clothing") =>
   });
 
 /* ==============================
-   PRODUCT IMAGE (REMOVE BG)
+   PRODUCT IMAGE (REMOVE BG - IMPROVED)
    ============================== */
 export const uploadProductImageToCloudinary = (
   fileBuffer,
@@ -36,10 +36,12 @@ export const uploadProductImageToCloudinary = (
         folder,
         resource_type: "image",
 
-        // 🔥 REMOVE BACKGROUND
-        background_removal: "cloudinary_ai",
+        // 🔥 MORE RELIABLE BACKGROUND REMOVAL
+        transformation: [
+          { effect: "background_removal" }
+        ],
 
-        // 🔥 FORCE TRANSPARENT PNG
+        // 🔥 FORCE PNG FOR TRANSPARENCY
         format: "png",
 
         // 🔥 AUTO OPTIMIZATION

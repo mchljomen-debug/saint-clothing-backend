@@ -215,10 +215,25 @@ const addProduct = async (req, res) => {
       if (url) images.push(url);
     }
 
+    const outfitImage = req.files?.outfitImage?.[0]
+      ? await uploadSingleIfExists(
+          req.files.outfitImage[0],
+          "saint-clothing/outfits",
+          true
+        )
+      : "";
+
     const model3d = req.files?.model3d?.[0]
       ? await uploadSingleIfExists(
           req.files.model3d[0],
           "saint-clothing/models"
+        )
+      : "";
+
+    const sizeChartImage = req.files?.sizeChartImage?.[0]
+      ? await uploadSingleIfExists(
+          req.files.sizeChartImage[0],
+          "saint-clothing/size-charts"
         )
       : "";
 
@@ -227,13 +242,6 @@ const addProduct = async (req, res) => {
 
     const parsedStock =
       typeof stock === "string" ? JSON.parse(stock) : stock || {};
-
-    const sizeChartImage = req.files?.sizeChartImage?.[0]
-      ? await uploadSingleIfExists(
-          req.files.sizeChartImage[0],
-          "saint-clothing/size-charts"
-        )
-      : "";
 
     const product = new Product({
       name: String(name).trim(),
@@ -250,6 +258,7 @@ const addProduct = async (req, res) => {
       stock: parsedStock,
       colors: parseArrayField(colors, []),
       images,
+      outfitImage,
       sizeChartImage,
       model3d,
       onSale: finalOnSale,
@@ -433,6 +442,14 @@ const updateProduct = async (req, res) => {
       updateData.sizeChartImage = await uploadSingleIfExists(
         req.files.sizeChartImage[0],
         "saint-clothing/size-charts"
+      );
+    }
+
+    if (req.files?.outfitImage?.[0]) {
+      updateData.outfitImage = await uploadSingleIfExists(
+        req.files.outfitImage[0],
+        "saint-clothing/outfits",
+        true
       );
     }
 

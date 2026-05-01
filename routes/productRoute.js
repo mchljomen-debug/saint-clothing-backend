@@ -28,6 +28,7 @@ const productUpload = upload.fields([
   { name: "image4", maxCount: 1 },
   { name: "sizeChartImage", maxCount: 1 },
   { name: "model3d", maxCount: 1 },
+  { name: "outfitImage", maxCount: 1 },
 ]);
 
 // ADD / UPDATE PRODUCT

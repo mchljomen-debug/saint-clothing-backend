@@ -20,6 +20,15 @@ const productSchema = new mongoose.Schema(
     image: { type: String, default: "" },
     images: [{ type: String }],
 
+    // Used only for Style Builder / 2D outfit preview
+    outfitImage: { type: String, default: "" },
+
+    outfitPosition: {
+      x: { type: Number, default: 0 },
+      y: { type: Number, default: 0 },
+      scale: { type: Number, default: 1 },
+    },
+
     sizeChartImage: { type: String, default: "" },
     model3d: { type: String, default: "" },
 
