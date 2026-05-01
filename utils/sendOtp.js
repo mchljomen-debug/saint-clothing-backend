@@ -14,19 +14,28 @@ export const sendOTP = async (email, otp) => {
 
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
+      port: 587,                // 🔥 CHANGED (better for Render)
+      secure: false,            // 🔥 REQUIRED for 587
+      requireTLS: true,         // 🔥 force TLS upgrade
+
       auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS,
       },
+
+      connectionTimeout: 30000, // 30s
+      greetingTimeout: 30000,
+      socketTimeout: 30000,
     });
 
+    // Check SMTP connection
     await transporter.verify();
+    console.log("SMTP CONNECTION SUCCESS");
 
     const htmlContent = `
       <div style="font-family: Helvetica, Arial, sans-serif; background:#F8F8F6; padding:40px 0; color:#111;">
         <div style="max-width:500px; margin:0 auto; background:#fff; border-top:4px solid #111;">
+          
           <div style="padding:30px; text-align:center; background:#111;">
             <h1 style="color:#fff; font-size:20px; font-weight:900; letter-spacing:4px; margin:0;">
               SAINT
@@ -62,6 +71,7 @@ export const sendOTP = async (email, otp) => {
               SAINT CLOTHING // AUTOMATED VERIFICATION
             </p>
           </div>
+
         </div>
       </div>
     `;
@@ -75,8 +85,19 @@ export const sendOTP = async (email, otp) => {
 
     console.log("OTP EMAIL SENT:", info.messageId);
     return info;
+
   } catch (error) {
-    console.log("SEND OTP EMAIL ERROR:", error.message);
+    console.log("SEND OTP EMAIL ERROR:", error);
+
+    // 🔥 better error visibility
+    if (error.code === "ETIMEDOUT") {
+      throw new Error("SMTP connection timeout (Render may be blocking SMTP)");
+    }
+
+    if (error.code === "EAUTH") {
+      throw new Error("Invalid Gmail credentials (check app password)");
+    }
+
     throw new Error(error.message || "Failed to send OTP email");
   }
 };
