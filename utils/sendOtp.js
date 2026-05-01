@@ -2,25 +2,30 @@ import nodemailer from "nodemailer";
 
 export const sendOTP = async (email, otp) => {
   try {
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
-      throw new Error("GMAIL_USER or GMAIL_PASS is missing");
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailPass = process.env.GMAIL_PASS;
+
+    if (!gmailUser || !gmailPass) {
+      throw new Error("GMAIL_USER or GMAIL_PASS is missing in environment variables");
     }
 
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
+        user: gmailUser,
+        pass: gmailPass,
       },
     });
+
+    await transporter.verify();
 
     const htmlContent = `
       <div style="font-family: Helvetica, Arial, sans-serif; background:#F8F8F6; padding:40px 0; color:#111;">
         <div style="max-width:500px; margin:0 auto; background:#fff; border-top:4px solid #111;">
           <div style="padding:30px; text-align:center; background:#111;">
-            <h1 style="color:#fff; font-size:20px; font-weight:900; letter-spacing:4px; margin:0;">
-              SAINT
-            </h1>
+            <h1 style="color:#fff; font-size:20px; font-weight:900; letter-spacing:4px; margin:0;">SAINT</h1>
             <p style="color:#bdbdbd; font-size:10px; letter-spacing:2px; margin-top:8px;">
               CLOTHING ACCOUNT VERIFICATION
             </p>
@@ -57,7 +62,7 @@ export const sendOTP = async (email, otp) => {
     `;
 
     const info = await transporter.sendMail({
-      from: `"Saint Clothing" <${process.env.GMAIL_USER}>`,
+      from: `"Saint Clothing" <${gmailUser}>`,
       to: email,
       subject: `SAINT Verification Code: ${otp}`,
       html: htmlContent,
@@ -66,7 +71,7 @@ export const sendOTP = async (email, otp) => {
     console.log("OTP EMAIL SENT:", info.messageId);
     return info;
   } catch (error) {
-    console.log("SEND OTP EMAIL ERROR:", error);
-    throw error;
+    console.log("SEND OTP EMAIL ERROR:", error.message);
+    throw new Error(error.message || "Failed to send OTP email");
   }
 };
