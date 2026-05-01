@@ -2,6 +2,7 @@ import policyModel from "../models/policyModel.js";
 import { addLog } from "../utils/activityLogger.js";
 
 const TERMS_KEY = "terms-and-conditions";
+const PRIVACY_KEY = "privacy-policy";
 
 const normalizeContent = (content = []) => {
   if (!Array.isArray(content)) return [];
@@ -134,6 +135,30 @@ export const getTermsPolicy = async (req, res) => {
     });
   } catch (err) {
     console.log("GET TERMS POLICY ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const getPrivacyPolicy = async (req, res) => {
+  try {
+    const doc = await ensureMainPolicy();
+
+    const privacy = (doc.policies || []).find(
+      (item) => item.key === PRIVACY_KEY && item.isActive !== false
+    );
+
+    return res.json({
+      success: true,
+      version: doc.version,
+      title: privacy?.title || "Privacy Policy",
+      content: normalizeContent(privacy?.content || []),
+      updatedAt: doc.updatedAt,
+    });
+  } catch (err) {
+    console.log("GET PRIVACY POLICY ERROR:", err);
     return res.status(500).json({
       success: false,
       message: err.message,
