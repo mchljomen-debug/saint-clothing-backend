@@ -94,6 +94,17 @@ const parseObjectField = (value, fallback = {}) => {
   }
 };
 
+const getSizeQty = (obj, size) => {
+  const target = String(size || "").trim().toUpperCase();
+  const plain = parseObjectField(obj, {});
+
+  const foundKey = Object.keys(plain).find(
+    (key) => String(key).trim().toUpperCase() === target
+  );
+
+  return Number(foundKey ? plain[foundKey] : 0);
+};
+
 const normalizeRecommendationSection = (value) => {
   const allowed = ["top", "bottom", "both", "none"];
   const normalized = String(value || "none").trim().toLowerCase();
@@ -153,9 +164,18 @@ const uploadSingleIfExists = async (
 const getMapValue = (mapLike, key) => {
   const sizeKey = String(key || "").toUpperCase();
 
-  if (mapLike instanceof Map) return Number(mapLike.get(sizeKey) || 0);
+  if (mapLike instanceof Map) {
+    const exact = mapLike.get(sizeKey);
+    if (exact !== undefined && exact !== null) return Number(exact) || 0;
 
-  return Number(mapLike?.[sizeKey] || 0);
+    const foundKey = Array.from(mapLike.keys()).find(
+      (item) => String(item).trim().toUpperCase() === sizeKey
+    );
+
+    return Number(foundKey ? mapLike.get(foundKey) : 0);
+  }
+
+  return getSizeQty(mapLike, sizeKey);
 };
 
 const setMapValue = (product, field, key, value) => {
@@ -210,8 +230,8 @@ const autoGeneratePreorderStock = ({
   const autoSlots = Math.max(0, Number(preorderAutoStock) || 0);
 
   SIZE_ORDER.forEach((size) => {
-    const actualQty = Number(actualStockObj?.[size] || 0);
-    const currentPreorderQty = Number(nextPreorderStock?.[size] || 0);
+    const actualQty = getSizeQty(actualStockObj, size);
+    const currentPreorderQty = getSizeQty(nextPreorderStock, size);
 
     if (actualQty > 0 && actualQty <= threshold && currentPreorderQty <= 0) {
       nextPreorderStock[size] = autoSlots;
@@ -635,7 +655,10 @@ const updateProduct = async (req, res) => {
 
     const nextPreorderStock =
       req.body.preorderStock !== undefined
-        ? parseObjectField(req.body.preorderStock, existingProduct.preorderStock || {})
+        ? parseObjectField(
+            req.body.preorderStock,
+            existingProduct.preorderStock || {}
+          )
         : parseObjectField(existingProduct.preorderStock || {}, {});
 
     updateData.stock = nextStock;
