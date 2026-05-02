@@ -8,6 +8,8 @@ import uploadBufferToCloudinary, {
   uploadProductImageToCloudinary,
 } from "../utils/cloudinaryUpload.js";
 
+const SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"];
+
 // ==============================
 // HELPERS
 // ==============================
@@ -72,13 +74,20 @@ const parseArrayField = (value, fallback = []) => {
 const parseObjectField = (value, fallback = {}) => {
   try {
     if (!value) return fallback;
+
+    if (value instanceof Map) {
+      return Object.fromEntries(value);
+    }
+
     if (typeof value === "object" && !Array.isArray(value)) return value;
+
     if (typeof value === "string") {
       const parsed = JSON.parse(value);
       return typeof parsed === "object" && !Array.isArray(parsed)
         ? parsed
         : fallback;
     }
+
     return fallback;
   } catch {
     return fallback;
@@ -142,19 +151,25 @@ const uploadSingleIfExists = async (
 };
 
 const getMapValue = (mapLike, key) => {
-  if (mapLike instanceof Map) return Number(mapLike.get(key) || 0);
-  return Number(mapLike?.[key] || 0);
+  const sizeKey = String(key || "").toUpperCase();
+
+  if (mapLike instanceof Map) return Number(mapLike.get(sizeKey) || 0);
+
+  return Number(mapLike?.[sizeKey] || 0);
 };
 
 const setMapValue = (product, field, key, value) => {
+  const sizeKey = String(key || "").toUpperCase();
+  const safeValue = Math.max(0, Number(value) || 0);
+
   if (product?.[field] instanceof Map) {
-    product[field].set(key, value);
+    product[field].set(sizeKey, safeValue);
     return;
   }
 
   product[field] = {
     ...(product[field] || {}),
-    [key]: value,
+    [sizeKey]: safeValue,
   };
 };
 
@@ -173,6 +188,37 @@ const isPreorderMode = (product, sizeKey) => {
     actualStock <= threshold &&
     preorderStock > 0
   );
+};
+
+const autoGeneratePreorderStock = ({
+  stock = {},
+  preorderStock = {},
+  preorderEnabled = true,
+  preorderThreshold = 5,
+  preorderAutoGenerate = true,
+  preorderAutoStock = 20,
+}) => {
+  const actualStockObj = parseObjectField(stock, {});
+  const preorderStockObj = parseObjectField(preorderStock, {});
+  const nextPreorderStock = { ...preorderStockObj };
+
+  if (!preorderEnabled || !preorderAutoGenerate) {
+    return nextPreorderStock;
+  }
+
+  const threshold = Math.max(0, Number(preorderThreshold) || 5);
+  const autoSlots = Math.max(0, Number(preorderAutoStock) || 0);
+
+  SIZE_ORDER.forEach((size) => {
+    const actualQty = Number(actualStockObj?.[size] || 0);
+    const currentPreorderQty = Number(nextPreorderStock?.[size] || 0);
+
+    if (actualQty > 0 && actualQty <= threshold && currentPreorderQty <= 0) {
+      nextPreorderStock[size] = autoSlots;
+    }
+  });
+
+  return nextPreorderStock;
 };
 
 // ==============================
@@ -196,6 +242,8 @@ const addProduct = async (req, res) => {
       preorderEnabled,
       preorderThreshold,
       preorderStock,
+      preorderAutoGenerate,
+      preorderAutoStock,
       preorderRestockDate,
       preorderNote,
       colors,
@@ -296,7 +344,25 @@ const addProduct = async (req, res) => {
     const finalSalePercent = finalOnSale ? clampSalePercent(salePercent) : 0;
 
     const parsedStock = parseObjectField(stock, {});
-    const parsedPreorderStock = parseObjectField(preorderStock, {});
+    const finalPreorderEnabled = parseBoolean(preorderEnabled, true);
+    const finalPreorderThreshold = Math.max(
+      0,
+      parseNumber(preorderThreshold, 5)
+    );
+    const finalPreorderAutoGenerate = parseBoolean(preorderAutoGenerate, true);
+    const finalPreorderAutoStock = Math.max(
+      0,
+      parseNumber(preorderAutoStock, 20)
+    );
+
+    const parsedPreorderStock = autoGeneratePreorderStock({
+      stock: parsedStock,
+      preorderStock: parseObjectField(preorderStock, {}),
+      preorderEnabled: finalPreorderEnabled,
+      preorderThreshold: finalPreorderThreshold,
+      preorderAutoGenerate: finalPreorderAutoGenerate,
+      preorderAutoStock: finalPreorderAutoStock,
+    });
 
     const product = new Product({
       name: String(name).trim(),
@@ -311,9 +377,11 @@ const addProduct = async (req, res) => {
       newArrival: parseBoolean(newArrival, false),
       sizes: parseArrayField(sizes, []),
       stock: parsedStock,
-      preorderEnabled: parseBoolean(preorderEnabled, true),
-      preorderThreshold: Math.max(0, parseNumber(preorderThreshold, 5)),
+      preorderEnabled: finalPreorderEnabled,
+      preorderThreshold: finalPreorderThreshold,
       preorderStock: parsedPreorderStock,
+      preorderAutoGenerate: finalPreorderAutoGenerate,
+      preorderAutoStock: finalPreorderAutoStock,
       preorderRestockDate: preorderRestockDate
         ? new Date(preorderRestockDate)
         : null,
@@ -522,30 +590,67 @@ const updateProduct = async (req, res) => {
       );
     }
 
-    if (req.body.stock !== undefined) {
-      updateData.stock = parseObjectField(req.body.stock, existingProduct.stock);
-    }
+    const nextStock =
+      req.body.stock !== undefined
+        ? parseObjectField(req.body.stock, existingProduct.stock || {})
+        : parseObjectField(existingProduct.stock || {}, {});
 
-    if (req.body.preorderEnabled !== undefined) {
-      updateData.preorderEnabled = parseBoolean(
-        req.body.preorderEnabled,
-        existingProduct.preorderEnabled !== false
-      );
-    }
+    const nextPreorderEnabled =
+      req.body.preorderEnabled !== undefined
+        ? parseBoolean(
+            req.body.preorderEnabled,
+            existingProduct.preorderEnabled !== false
+          )
+        : existingProduct.preorderEnabled !== false;
 
-    if (req.body.preorderThreshold !== undefined) {
-      updateData.preorderThreshold = Math.max(
-        0,
-        parseNumber(req.body.preorderThreshold, existingProduct.preorderThreshold || 5)
-      );
-    }
+    const nextPreorderThreshold =
+      req.body.preorderThreshold !== undefined
+        ? Math.max(
+            0,
+            parseNumber(
+              req.body.preorderThreshold,
+              existingProduct.preorderThreshold || 5
+            )
+          )
+        : Math.max(0, Number(existingProduct.preorderThreshold ?? 5));
 
-    if (req.body.preorderStock !== undefined) {
-      updateData.preorderStock = parseObjectField(
-        req.body.preorderStock,
-        existingProduct.preorderStock || {}
-      );
-    }
+    const nextPreorderAutoGenerate =
+      req.body.preorderAutoGenerate !== undefined
+        ? parseBoolean(
+            req.body.preorderAutoGenerate,
+            existingProduct.preorderAutoGenerate !== false
+          )
+        : existingProduct.preorderAutoGenerate !== false;
+
+    const nextPreorderAutoStock =
+      req.body.preorderAutoStock !== undefined
+        ? Math.max(
+            0,
+            parseNumber(
+              req.body.preorderAutoStock,
+              existingProduct.preorderAutoStock || 20
+            )
+          )
+        : Math.max(0, Number(existingProduct.preorderAutoStock ?? 20));
+
+    const nextPreorderStock =
+      req.body.preorderStock !== undefined
+        ? parseObjectField(req.body.preorderStock, existingProduct.preorderStock || {})
+        : parseObjectField(existingProduct.preorderStock || {}, {});
+
+    updateData.stock = nextStock;
+    updateData.preorderEnabled = nextPreorderEnabled;
+    updateData.preorderThreshold = nextPreorderThreshold;
+    updateData.preorderAutoGenerate = nextPreorderAutoGenerate;
+    updateData.preorderAutoStock = nextPreorderAutoStock;
+    updateData.preorderStock = autoGeneratePreorderStock({
+      stock: nextStock,
+      preorderStock: nextPreorderStock,
+      preorderEnabled: nextPreorderEnabled,
+      preorderThreshold: nextPreorderThreshold,
+      preorderAutoGenerate: nextPreorderAutoGenerate,
+      preorderAutoStock: nextPreorderAutoStock,
+    });
 
     if (req.body.preorderRestockDate !== undefined) {
       updateData.preorderRestockDate = req.body.preorderRestockDate
@@ -887,6 +992,8 @@ const updateStock = async (req, res) => {
       preorderStock,
       preorderEnabled,
       preorderThreshold,
+      preorderAutoGenerate,
+      preorderAutoStock,
       preorderRestockDate,
       preorderNote,
     } = req.body;
@@ -907,21 +1014,49 @@ const updateStock = async (req, res) => {
       });
     }
 
-    if (stock !== undefined) {
-      product.stock = parseObjectField(stock, {});
-    }
+    const nextStock =
+      stock !== undefined
+        ? parseObjectField(stock, {})
+        : parseObjectField(product.stock, {});
 
-    if (preorderStock !== undefined) {
-      product.preorderStock = parseObjectField(preorderStock, {});
-    }
+    const nextPreorderEnabled =
+      preorderEnabled !== undefined
+        ? parseBoolean(preorderEnabled, true)
+        : product.preorderEnabled !== false;
 
-    if (preorderEnabled !== undefined) {
-      product.preorderEnabled = parseBoolean(preorderEnabled, true);
-    }
+    const nextPreorderThreshold =
+      preorderThreshold !== undefined
+        ? Math.max(0, parseNumber(preorderThreshold, 5))
+        : Math.max(0, Number(product.preorderThreshold ?? 5));
 
-    if (preorderThreshold !== undefined) {
-      product.preorderThreshold = Math.max(0, parseNumber(preorderThreshold, 5));
-    }
+    const nextPreorderAutoGenerate =
+      preorderAutoGenerate !== undefined
+        ? parseBoolean(preorderAutoGenerate, true)
+        : product.preorderAutoGenerate !== false;
+
+    const nextPreorderAutoStock =
+      preorderAutoStock !== undefined
+        ? Math.max(0, parseNumber(preorderAutoStock, 20))
+        : Math.max(0, Number(product.preorderAutoStock ?? 20));
+
+    const nextPreorderStock = autoGeneratePreorderStock({
+      stock: nextStock,
+      preorderStock:
+        preorderStock !== undefined
+          ? parseObjectField(preorderStock, {})
+          : parseObjectField(product.preorderStock, {}),
+      preorderEnabled: nextPreorderEnabled,
+      preorderThreshold: nextPreorderThreshold,
+      preorderAutoGenerate: nextPreorderAutoGenerate,
+      preorderAutoStock: nextPreorderAutoStock,
+    });
+
+    product.stock = nextStock;
+    product.preorderEnabled = nextPreorderEnabled;
+    product.preorderThreshold = nextPreorderThreshold;
+    product.preorderAutoGenerate = nextPreorderAutoGenerate;
+    product.preorderAutoStock = nextPreorderAutoStock;
+    product.preorderStock = nextPreorderStock;
 
     if (preorderRestockDate !== undefined) {
       product.preorderRestockDate = preorderRestockDate

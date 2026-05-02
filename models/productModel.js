@@ -20,7 +20,6 @@ const productSchema = new mongoose.Schema(
     image: { type: String, default: "" },
     images: [{ type: String }],
 
-    // Used only for Style Builder / 2D outfit preview
     outfitImage: { type: String, default: "" },
 
     outfitPosition: {
@@ -57,30 +56,36 @@ const productSchema = new mongoose.Schema(
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
 
-    // Actual on-hand inventory
     stock: {
       type: Map,
       of: Number,
       default: {},
     },
 
-    // Pre-order settings
     preorderEnabled: {
       type: Boolean,
       default: true,
     },
 
-    // If actual stock is <= this number, frontend/admin can auto-show preorder
     preorderThreshold: {
       type: Number,
       default: 5,
     },
 
-    // Separate pre-order allocation per size
     preorderStock: {
       type: Map,
       of: Number,
       default: {},
+    },
+
+    preorderAutoGenerate: {
+      type: Boolean,
+      default: true,
+    },
+
+    preorderAutoStock: {
+      type: Number,
+      default: 20,
     },
 
     preorderRestockDate: {
