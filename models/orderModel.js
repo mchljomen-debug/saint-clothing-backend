@@ -17,6 +17,11 @@ const orderItemSchema = new mongoose.Schema(
     category: { type: String, default: "" },
     sku: { type: String, default: "" },
     groupCode: { type: String, default: "" },
+
+    // Pre-order item details
+    isPreorder: { type: Boolean, default: false },
+    expectedRestockDate: { type: Date, default: null },
+    preorderNote: { type: String, default: "" },
   },
   { _id: false }
 );
@@ -85,6 +90,12 @@ const orderSchema = new mongoose.Schema(
     branch: {
       type: String,
       default: "branch1",
+    },
+
+    // Whole-order preorder marker
+    isPreorder: {
+      type: Boolean,
+      default: false,
     },
 
     date: {

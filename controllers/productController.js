@@ -69,6 +69,22 @@ const parseArrayField = (value, fallback = []) => {
   }
 };
 
+const parseObjectField = (value, fallback = {}) => {
+  try {
+    if (!value) return fallback;
+    if (typeof value === "object" && !Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      const parsed = JSON.parse(value);
+      return typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : fallback;
+    }
+    return fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 const normalizeRecommendationSection = (value) => {
   const allowed = ["top", "bottom", "both", "none"];
   const normalized = String(value || "none").trim().toLowerCase();
@@ -125,6 +141,40 @@ const uploadSingleIfExists = async (
   return result.secure_url;
 };
 
+const getMapValue = (mapLike, key) => {
+  if (mapLike instanceof Map) return Number(mapLike.get(key) || 0);
+  return Number(mapLike?.[key] || 0);
+};
+
+const setMapValue = (product, field, key, value) => {
+  if (product?.[field] instanceof Map) {
+    product[field].set(key, value);
+    return;
+  }
+
+  product[field] = {
+    ...(product[field] || {}),
+    [key]: value,
+  };
+};
+
+const getStockValue = (product, sizeKey) => getMapValue(product?.stock, sizeKey);
+
+const getPreorderValue = (product, sizeKey) =>
+  getMapValue(product?.preorderStock, sizeKey);
+
+const isPreorderMode = (product, sizeKey) => {
+  const actualStock = getStockValue(product, sizeKey);
+  const preorderStock = getPreorderValue(product, sizeKey);
+  const threshold = Number(product?.preorderThreshold ?? 5);
+
+  return (
+    product?.preorderEnabled !== false &&
+    actualStock <= threshold &&
+    preorderStock > 0
+  );
+};
+
 // ==============================
 // ADD PRODUCT
 // ==============================
@@ -143,6 +193,11 @@ const addProduct = async (req, res) => {
       newArrival,
       sizes,
       stock,
+      preorderEnabled,
+      preorderThreshold,
+      preorderStock,
+      preorderRestockDate,
+      preorderNote,
       colors,
       branch,
       onSale,
@@ -240,8 +295,8 @@ const addProduct = async (req, res) => {
     const finalOnSale = parseBoolean(onSale, false);
     const finalSalePercent = finalOnSale ? clampSalePercent(salePercent) : 0;
 
-    const parsedStock =
-      typeof stock === "string" ? JSON.parse(stock) : stock || {};
+    const parsedStock = parseObjectField(stock, {});
+    const parsedPreorderStock = parseObjectField(preorderStock, {});
 
     const product = new Product({
       name: String(name).trim(),
@@ -256,6 +311,13 @@ const addProduct = async (req, res) => {
       newArrival: parseBoolean(newArrival, false),
       sizes: parseArrayField(sizes, []),
       stock: parsedStock,
+      preorderEnabled: parseBoolean(preorderEnabled, true),
+      preorderThreshold: Math.max(0, parseNumber(preorderThreshold, 5)),
+      preorderStock: parsedPreorderStock,
+      preorderRestockDate: preorderRestockDate
+        ? new Date(preorderRestockDate)
+        : null,
+      preorderNote: preorderNote || "",
       colors: parseArrayField(colors, []),
       images,
       outfitImage,
@@ -461,10 +523,38 @@ const updateProduct = async (req, res) => {
     }
 
     if (req.body.stock !== undefined) {
-      updateData.stock =
-        typeof req.body.stock === "string"
-          ? JSON.parse(req.body.stock)
-          : req.body.stock;
+      updateData.stock = parseObjectField(req.body.stock, existingProduct.stock);
+    }
+
+    if (req.body.preorderEnabled !== undefined) {
+      updateData.preorderEnabled = parseBoolean(
+        req.body.preorderEnabled,
+        existingProduct.preorderEnabled !== false
+      );
+    }
+
+    if (req.body.preorderThreshold !== undefined) {
+      updateData.preorderThreshold = Math.max(
+        0,
+        parseNumber(req.body.preorderThreshold, existingProduct.preorderThreshold || 5)
+      );
+    }
+
+    if (req.body.preorderStock !== undefined) {
+      updateData.preorderStock = parseObjectField(
+        req.body.preorderStock,
+        existingProduct.preorderStock || {}
+      );
+    }
+
+    if (req.body.preorderRestockDate !== undefined) {
+      updateData.preorderRestockDate = req.body.preorderRestockDate
+        ? new Date(req.body.preorderRestockDate)
+        : null;
+    }
+
+    if (req.body.preorderNote !== undefined) {
+      updateData.preorderNote = String(req.body.preorderNote || "");
     }
 
     if (req.body.colors !== undefined) {
@@ -787,12 +877,19 @@ const listDeletedProducts = async (req, res) => {
 };
 
 // ==============================
-// UPDATE STOCK
+// UPDATE STOCK / PREORDER INVENTORY
 // ==============================
 const updateStock = async (req, res) => {
   try {
     const { id } = req.params;
-    const { stock } = req.body;
+    const {
+      stock,
+      preorderStock,
+      preorderEnabled,
+      preorderThreshold,
+      preorderRestockDate,
+      preorderNote,
+    } = req.body;
 
     const product = await Product.findById(id);
 
@@ -810,12 +907,37 @@ const updateStock = async (req, res) => {
       });
     }
 
-    product.stock = stock || {};
+    if (stock !== undefined) {
+      product.stock = parseObjectField(stock, {});
+    }
+
+    if (preorderStock !== undefined) {
+      product.preorderStock = parseObjectField(preorderStock, {});
+    }
+
+    if (preorderEnabled !== undefined) {
+      product.preorderEnabled = parseBoolean(preorderEnabled, true);
+    }
+
+    if (preorderThreshold !== undefined) {
+      product.preorderThreshold = Math.max(0, parseNumber(preorderThreshold, 5));
+    }
+
+    if (preorderRestockDate !== undefined) {
+      product.preorderRestockDate = preorderRestockDate
+        ? new Date(preorderRestockDate)
+        : null;
+    }
+
+    if (preorderNote !== undefined) {
+      product.preorderNote = String(preorderNote || "");
+    }
+
     await product.save();
 
     await addLog({
       action: "PRODUCT_STOCK_UPDATED",
-      message: `Stock updated for: ${formatProductName(product)}`,
+      message: `Inventory/pre-order updated for: ${formatProductName(product)}`,
       user: getActorName(req, "Admin"),
       entityId: product._id,
       entityType: "Product",
@@ -823,7 +945,7 @@ const updateStock = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Stock updated successfully",
+      message: "Inventory updated successfully",
       product,
     });
   } catch (error) {
@@ -836,7 +958,7 @@ const updateStock = async (req, res) => {
 };
 
 // ==============================
-// DEDUCT STOCK
+// DEDUCT STOCK / PREORDER STOCK
 // ==============================
 const deductStock = async (req, res) => {
   try {
@@ -862,13 +984,27 @@ const deductStock = async (req, res) => {
       }
 
       const sizeKey = String(size || "").toUpperCase();
-      const currentQty = Number(product.stock.get(sizeKey) || 0);
+      const qty = Number(quantity || 0);
+      const preorderMode = item.isPreorder || isPreorderMode(product, sizeKey);
 
-      if (currentQty < Number(quantity)) {
-        return res.status(400).json({
-          success: false,
-          message: `Not enough stock for ${product.name} (${sizeKey})`,
-        });
+      if (preorderMode) {
+        const currentPreorderQty = getPreorderValue(product, sizeKey);
+
+        if (currentPreorderQty < qty) {
+          return res.status(400).json({
+            success: false,
+            message: `Not enough pre-order stock for ${product.name} (${sizeKey})`,
+          });
+        }
+      } else {
+        const currentQty = getStockValue(product, sizeKey);
+
+        if (currentQty < qty) {
+          return res.status(400).json({
+            success: false,
+            message: `Not enough stock for ${product.name} (${sizeKey})`,
+          });
+        }
       }
     }
 
@@ -877,16 +1013,31 @@ const deductStock = async (req, res) => {
 
       const product = await Product.findById(productId);
       const sizeKey = String(size || "").toUpperCase();
-      const currentQty = Number(product.stock.get(sizeKey) || 0);
+      const qty = Number(quantity || 0);
+      const preorderMode = item.isPreorder || isPreorderMode(product, sizeKey);
 
-      product.stock.set(sizeKey, currentQty - Number(quantity));
+      if (preorderMode) {
+        const currentPreorderQty = getPreorderValue(product, sizeKey);
+        setMapValue(
+          product,
+          "preorderStock",
+          sizeKey,
+          currentPreorderQty - qty
+        );
+      } else {
+        const currentQty = getStockValue(product, sizeKey);
+        setMapValue(product, "stock", sizeKey, currentQty - qty);
+      }
+
       await product.save();
 
       await addLog({
-        action: "PRODUCT_STOCK_DEDUCTED",
-        message: `Stock deducted: ${product.name} (${sizeKey}) -${Number(
-          quantity
-        )}`,
+        action: preorderMode
+          ? "PRODUCT_PREORDER_STOCK_DEDUCTED"
+          : "PRODUCT_STOCK_DEDUCTED",
+        message: preorderMode
+          ? `Pre-order stock deducted: ${product.name} (${sizeKey}) -${qty}`
+          : `Stock deducted: ${product.name} (${sizeKey}) -${qty}`,
         user: getActorName(req, "System"),
         entityId: product._id,
         entityType: "Product",
@@ -895,7 +1046,7 @@ const deductStock = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Stock deducted successfully",
+      message: "Inventory deducted successfully",
     });
   } catch (error) {
     console.error("DEDUCT STOCK ERROR:", error);

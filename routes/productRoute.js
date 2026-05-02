@@ -35,9 +35,9 @@ const productUpload = upload.fields([
 router.post("/add", adminAuth, productUpload, addProduct);
 router.put("/update/:id", adminAuth, productUpload, updateProduct);
 
-// STOCK
+// INVENTORY / PRE-ORDER STOCK
 router.put("/update-stock/:id", adminAuth, updateStock);
-router.post("/deduct-stock", deductStock);
+router.post("/deduct-stock", adminAuth, deductStock);
 
 // PUBLIC PRODUCT
 router.get("/single/:id", getSingleProduct);

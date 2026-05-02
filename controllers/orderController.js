@@ -14,6 +14,7 @@ const normalizeStatus = (status) => {
   if (value === "delivered") return "Delivered";
   if (value === "pending payment") return "Pending Payment";
   if (value === "payment failed") return "Payment Failed";
+  if (value === "cancelled") return "Cancelled";
 
   return "Order Placed";
 };
@@ -92,23 +93,57 @@ const getCustomerNameFromAddress = (address) => {
   );
 };
 
-const getStockValue = (product, sizeKey) => {
-  if (product?.stock instanceof Map) {
-    return Number(product.stock.get(sizeKey) || 0);
+const getMapValue = (mapLike, key) => {
+  const sizeKey = String(key || "").toUpperCase();
+
+  if (mapLike instanceof Map) {
+    return Number(mapLike.get(sizeKey) || 0);
   }
-  return Number(product?.stock?.[sizeKey] || 0);
+
+  return Number(mapLike?.[sizeKey] || 0);
 };
 
-const setStockValue = (product, sizeKey, value) => {
-  if (product?.stock instanceof Map) {
-    product.stock.set(sizeKey, value);
+const setMapValue = (product, field, key, value) => {
+  const sizeKey = String(key || "").toUpperCase();
+  const safeValue = Math.max(0, Number(value) || 0);
+
+  if (product?.[field] instanceof Map) {
+    product[field].set(sizeKey, safeValue);
     return;
   }
 
-  product.stock = {
-    ...(product.stock || {}),
-    [sizeKey]: value,
+  product[field] = {
+    ...(product[field] || {}),
+    [sizeKey]: safeValue,
   };
+};
+
+const getStockValue = (product, sizeKey) => getMapValue(product?.stock, sizeKey);
+
+const getPreorderValue = (product, sizeKey) =>
+  getMapValue(product?.preorderStock, sizeKey);
+
+const isPreorderMode = (product, sizeKey) => {
+  const actualStock = getStockValue(product, sizeKey);
+  const preorderStock = getPreorderValue(product, sizeKey);
+  const threshold = Number(product?.preorderThreshold ?? 5);
+
+  return (
+    product?.preorderEnabled !== false &&
+    actualStock <= threshold &&
+    preorderStock > 0
+  );
+};
+
+const shouldShowOrderInLists = (order) => {
+  const method = normalizePaymentMethod(order?.paymentMethod);
+  const paymentStatus = String(order?.paymentStatus || "")
+    .trim()
+    .toLowerCase();
+
+  if (method === "COD") return true;
+
+  return ["verifying", "paid", "failed"].includes(paymentStatus);
 };
 
 const validateAndNormalizeItems = async (items) => {
@@ -139,10 +174,28 @@ const validateAndNormalizeItems = async (items) => {
     }
 
     const sizeKey = String(item.size || "S").toUpperCase();
-    const available = getStockValue(product, sizeKey);
+    const quantity = Number(item.quantity || 0);
 
-    if (available < Number(item.quantity || 0)) {
+    if (quantity <= 0) {
+      const err = new Error("Invalid quantity");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const actualStock = getStockValue(product, sizeKey);
+    const preorderStock = getPreorderValue(product, sizeKey);
+    const preorderMode = isPreorderMode(product, sizeKey);
+
+    if (!preorderMode && actualStock < quantity) {
       const err = new Error(`Not enough stock for ${product.name} (${sizeKey})`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (preorderMode && preorderStock < quantity) {
+      const err = new Error(
+        `Pre-order stock not enough for ${product.name} (${sizeKey})`
+      );
       err.statusCode = 400;
       throw err;
     }
@@ -153,8 +206,8 @@ const validateAndNormalizeItems = async (items) => {
       ...item,
       productId: item.productId,
       size: sizeKey,
-      quantity: Number(item.quantity || 0),
-      price: Number(item.price || 0),
+      quantity,
+      price: Number(item.price || product.price || 0),
       onSale: !!item.onSale,
       salePercent: Number(item.salePercent || 0),
       branch: productBranch,
@@ -163,6 +216,9 @@ const validateAndNormalizeItems = async (items) => {
       groupCode: item.groupCode || product.groupCode || "",
       image: savedImage,
       name: item.name || product.name || "",
+      isPreorder: preorderMode,
+      expectedRestockDate: product.preorderRestockDate || null,
+      preorderNote: product.preorderNote || "",
     });
   }
 
@@ -183,26 +239,61 @@ const deductOrderStock = async (items) => {
     }
 
     const sizeKey = String(item.size || "S").toUpperCase();
-    const available = getStockValue(product, sizeKey);
+    const quantity = Number(item.quantity || 0);
+    const preorderMode = item.isPreorder || isPreorderMode(product, sizeKey);
 
-    if (available < Number(item.quantity || 0)) {
-      const err = new Error(`Stock issue for ${product.name} (${sizeKey})`);
-      err.statusCode = 400;
-      throw err;
+    if (preorderMode) {
+      const availablePreorder = getPreorderValue(product, sizeKey);
+
+      if (availablePreorder < quantity) {
+        const err = new Error(
+          `Pre-order stock issue for ${product.name} (${sizeKey})`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+
+      setMapValue(
+        product,
+        "preorderStock",
+        sizeKey,
+        availablePreorder - quantity
+      );
+
+      await product.save();
+
+      await addLog({
+        action: "ORDER_PREORDER_STOCK_DEDUCTED",
+        message: `Pre-order stock deducted for order item: ${
+          product.name
+        } (${sizeKey}) -${quantity}`,
+        user: "System",
+        entityId: product._id,
+        entityType: "Product",
+      });
+    } else {
+      const available = getStockValue(product, sizeKey);
+
+      if (available < quantity) {
+        const err = new Error(`Stock issue for ${product.name} (${sizeKey})`);
+        err.statusCode = 400;
+        throw err;
+      }
+
+      setMapValue(product, "stock", sizeKey, available - quantity);
+
+      await product.save();
+
+      await addLog({
+        action: "ORDER_STOCK_DEDUCTED",
+        message: `Stock deducted for order item: ${
+          product.name
+        } (${sizeKey}) -${quantity}`,
+        user: "System",
+        entityId: product._id,
+        entityType: "Product",
+      });
     }
-
-    setStockValue(product, sizeKey, available - Number(item.quantity || 0));
-    await product.save();
-
-    await addLog({
-      action: "ORDER_STOCK_DEDUCTED",
-      message: `Stock deducted for order item: ${product.name} (${sizeKey}) -${Number(
-        item.quantity || 0
-      )}`,
-      user: "System",
-      entityId: product._id,
-      entityType: "Product",
-    });
   }
 };
 
@@ -213,32 +304,45 @@ const restoreOrderStock = async (items) => {
     if (!product) continue;
 
     const sizeKey = String(item.size || "S").toUpperCase();
-    const available = getStockValue(product, sizeKey);
+    const quantity = Number(item.quantity || 0);
 
-    setStockValue(product, sizeKey, available + Number(item.quantity || 0));
-    await product.save();
+    if (item.isPreorder) {
+      const availablePreorder = getPreorderValue(product, sizeKey);
+      setMapValue(
+        product,
+        "preorderStock",
+        sizeKey,
+        availablePreorder + quantity
+      );
 
-    await addLog({
-      action: "ORDER_STOCK_RESTORED",
-      message: `Stock restored for order item: ${product.name} (${sizeKey}) +${Number(
-        item.quantity || 0
-      )}`,
-      user: "System",
-      entityId: product._id,
-      entityType: "Product",
-    });
+      await product.save();
+
+      await addLog({
+        action: "ORDER_PREORDER_STOCK_RESTORED",
+        message: `Pre-order stock restored for order item: ${
+          product.name
+        } (${sizeKey}) +${quantity}`,
+        user: "System",
+        entityId: product._id,
+        entityType: "Product",
+      });
+    } else {
+      const available = getStockValue(product, sizeKey);
+      setMapValue(product, "stock", sizeKey, available + quantity);
+
+      await product.save();
+
+      await addLog({
+        action: "ORDER_STOCK_RESTORED",
+        message: `Stock restored for order item: ${
+          product.name
+        } (${sizeKey}) +${quantity}`,
+        user: "System",
+        entityId: product._id,
+        entityType: "Product",
+      });
+    }
   }
-};
-
-const shouldShowOrderInLists = (order) => {
-  const method = normalizePaymentMethod(order?.paymentMethod);
-  const paymentStatus = String(order?.paymentStatus || "")
-    .trim()
-    .toLowerCase();
-
-  if (method === "COD") return true;
-
-  return ["verifying", "paid", "failed"].includes(paymentStatus);
 };
 
 const placeOrder = async (req, res) => {
@@ -260,8 +364,12 @@ const placeOrder = async (req, res) => {
     }
 
     const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
-    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(items);
+    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(
+      items
+    );
     const normalizedAddress = normalizeAddress(address);
+
+    const hasPreorderItems = normalizedItems.some((item) => item.isPreorder);
 
     const newOrder = new orderModel({
       userId,
@@ -274,11 +382,14 @@ const placeOrder = async (req, res) => {
         normalizedPaymentMethod === "COD" ? "cod_pending" : "pending",
       status:
         normalizedPaymentMethod === "COD"
-          ? "Order Placed"
+          ? hasPreorderItems
+            ? "Order Placed"
+            : "Order Placed"
           : "Pending Payment",
       branch: orderBranch,
       referenceNumber: "",
       paymentProofImage: "",
+      isPreorder: hasPreorderItems,
       date: Date.now(),
     });
 
@@ -290,8 +401,10 @@ const placeOrder = async (req, res) => {
     }
 
     await addLog({
-      action: "ORDER_CREATED",
-      message: `Order placed: ${newOrder._id} via ${normalizedPaymentMethod}`,
+      action: hasPreorderItems ? "PREORDER_CREATED" : "ORDER_CREATED",
+      message: hasPreorderItems
+        ? `Pre-order placed: ${newOrder._id} via ${normalizedPaymentMethod}`
+        : `Order placed: ${newOrder._id} via ${normalizedPaymentMethod}`,
       user: getCustomerNameFromAddress(normalizedAddress),
       entityId: newOrder._id,
       entityType: "Order",
@@ -299,8 +412,11 @@ const placeOrder = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Order placed successfully",
+      message: hasPreorderItems
+        ? "Pre-order placed successfully"
+        : "Order placed successfully",
       orderId: newOrder._id,
+      isPreorder: hasPreorderItems,
     });
   } catch (error) {
     console.error("ORDER ERROR:", error);
@@ -442,8 +558,12 @@ const approveManualPayment = async (req, res) => {
     await order.save();
 
     await addLog({
-      action: "ORDER_MANUAL_PAYMENT_APPROVED",
-      message: `Manual payment approved for order: ${order._id}`,
+      action: order.isPreorder
+        ? "PREORDER_MANUAL_PAYMENT_APPROVED"
+        : "ORDER_MANUAL_PAYMENT_APPROVED",
+      message: order.isPreorder
+        ? `Manual payment approved for pre-order: ${order._id}`
+        : `Manual payment approved for order: ${order._id}`,
       user: getActorName(req, "Admin"),
       entityId: order._id,
       entityType: "Order",
@@ -451,7 +571,9 @@ const approveManualPayment = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Manual payment approved and stock deducted",
+      message: order.isPreorder
+        ? "Manual payment approved and pre-order stock deducted"
+        : "Manual payment approved and stock deducted",
     });
   } catch (error) {
     console.error("APPROVE MANUAL PAYMENT ERROR:", error);
@@ -497,8 +619,12 @@ const rejectManualPayment = async (req, res) => {
     await order.save();
 
     await addLog({
-      action: "ORDER_MANUAL_PAYMENT_REJECTED",
-      message: `Manual payment rejected for order: ${order._id}`,
+      action: order.isPreorder
+        ? "PREORDER_MANUAL_PAYMENT_REJECTED"
+        : "ORDER_MANUAL_PAYMENT_REJECTED",
+      message: order.isPreorder
+        ? `Manual payment rejected for pre-order: ${order._id}`
+        : `Manual payment rejected for order: ${order._id}`,
       user: getActorName(req, "Admin"),
       entityId: order._id,
       entityType: "Order",
@@ -678,8 +804,10 @@ const cancelOrder = async (req, res) => {
     await order.save();
 
     await addLog({
-      action: "ORDER_CANCELLED",
-      message: `Order cancelled: ${order._id}`,
+      action: order.isPreorder ? "PREORDER_CANCELLED" : "ORDER_CANCELLED",
+      message: order.isPreorder
+        ? `Pre-order cancelled: ${order._id}`
+        : `Order cancelled: ${order._id}`,
       user: getCustomerNameFromOrder(order),
       entityId: order._id,
       entityType: "Order",

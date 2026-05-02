@@ -57,10 +57,40 @@ const productSchema = new mongoose.Schema(
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
 
+    // Actual on-hand inventory
     stock: {
       type: Map,
       of: Number,
       default: {},
+    },
+
+    // Pre-order settings
+    preorderEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
+    // If actual stock is <= this number, frontend/admin can auto-show preorder
+    preorderThreshold: {
+      type: Number,
+      default: 5,
+    },
+
+    // Separate pre-order allocation per size
+    preorderStock: {
+      type: Map,
+      of: Number,
+      default: {},
+    },
+
+    preorderRestockDate: {
+      type: Date,
+      default: null,
+    },
+
+    preorderNote: {
+      type: String,
+      default: "",
     },
 
     reviews: [reviewSchema],
