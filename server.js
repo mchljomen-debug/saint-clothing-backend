@@ -63,7 +63,15 @@ const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    const normalizedOrigin = origin
+      .replace(/\/$/, "")      // remove trailing slash
+      .replace(/:\d+$/, "");   // remove port
+
+    const isAllowed = allowedOrigins.some((allowed) =>
+      normalizedOrigin.startsWith(allowed)
+    );
+
+    if (isAllowed) {
       return callback(null, true);
     }
 
@@ -71,8 +79,6 @@ const corsOptions = {
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "token"],
 };
 
 app.use(cors(corsOptions));
