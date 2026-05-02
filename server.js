@@ -27,32 +27,39 @@ const port = process.env.PORT || 4000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// These can stay for payment proofs / hero / legacy local files
+/* ===============================
+   LOCAL FILE DIRECTORIES
+================================ */
 const uploadsDir = path.join(__dirname, "uploads");
 const paymentProofsDir = path.join(__dirname, "uploads", "payment-proofs");
 const avatarsDir = path.join(__dirname, "uploads", "avatars");
 const heroDir = path.join(__dirname, "uploads", "hero");
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(paymentProofsDir)) {
-  fs.mkdirSync(paymentProofsDir, { recursive: true });
-}
-if (!fs.existsSync(avatarsDir)) {
-  fs.mkdirSync(avatarsDir, { recursive: true });
-}
-if (!fs.existsSync(heroDir)) {
-  fs.mkdirSync(heroDir, { recursive: true });
-}
+[uploadsDir, paymentProofsDir, avatarsDir, heroDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
+/* ===============================
+   CORS CONFIG (UPDATED)
+================================ */
 const allowedOrigins = [
+  // LOCAL
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
   "http://localhost:8081",
+
+  // OLD VERCEL (keep for safety)
   "https://saint-clothing-frontend.vercel.app",
   "https://saint-clothing-admin.vercel.app",
+
+  // NEW DOMAIN (IMPORTANT)
+  "https://saintclothingbrandph.com",
+  "https://www.saintclothingbrandph.com",
+
+  // ENV (dynamic)
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
 ].filter(Boolean);
@@ -76,11 +83,17 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
+/* ===============================
+   MIDDLEWARE
+================================ */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/uploads", express.static(uploadsDir));
 
+/* ===============================
+   TEST ROUTES
+================================ */
 app.get("/", (req, res) => {
   res.send("API Working");
 });
@@ -109,6 +122,9 @@ app.get("/api/uploads-check", (req, res) => {
   });
 });
 
+/* ===============================
+   ROUTES
+================================ */
 app.use("/api/hero", heroRouter);
 app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
@@ -121,6 +137,10 @@ app.use("/api/address", addressRouter);
 app.use("/api/recommendation", recommendationRouter);
 app.use("/api/policy", policyRouter);
 app.use("/api/category", categoryRouter);
+
+/* ===============================
+   404 HANDLER
+================================ */
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -128,6 +148,9 @@ app.use((req, res) => {
   });
 });
 
+/* ===============================
+   ERROR HANDLER
+================================ */
 app.use((err, req, res, next) => {
   console.log("SERVER ERROR:", err);
 
@@ -144,6 +167,9 @@ app.use((err, req, res, next) => {
   });
 });
 
+/* ===============================
+   START SERVER
+================================ */
 const startServer = async () => {
   try {
     await connectDB();
