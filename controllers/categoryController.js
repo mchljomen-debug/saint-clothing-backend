@@ -2,11 +2,36 @@ import categoryModel from "../models/categoryModel.js";
 import uploadBufferToCloudinary from "../utils/cloudinaryUpload.js";
 
 const DEFAULT_CATEGORIES = [
-  "Tshirt",
-  "Long Sleeve",
-  "Jorts",
-  "Mesh Shorts",
-  "Crop Jersey",
+  {
+    name: "Tshirt",
+    section: "top",
+    matchWith: ["Jorts", "Mesh Shorts", "Pants", "Long Sleeve", "Crop Jersey"],
+  },
+  {
+    name: "Long Sleeve",
+    section: "top",
+    matchWith: ["Tshirt", "Jorts", "Mesh Shorts", "Pants"],
+  },
+  {
+    name: "Jorts",
+    section: "bottom",
+    matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"],
+  },
+  {
+    name: "Mesh Shorts",
+    section: "bottom",
+    matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"],
+  },
+  {
+    name: "Crop Jersey",
+    section: "top",
+    matchWith: ["Jorts", "Mesh Shorts", "Pants", "Long Sleeve"],
+  },
+  {
+    name: "Pants",
+    section: "bottom",
+    matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"],
+  },
 ];
 
 const escapeRegex = (text) => {
@@ -25,13 +50,27 @@ const uploadCategoryImage = async (file) => {
 };
 
 export const seedDefaultCategories = async () => {
-  for (const name of DEFAULT_CATEGORIES) {
+  for (const item of DEFAULT_CATEGORIES) {
     const exists = await categoryModel.findOne({
-      name: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
+      name: { $regex: `^${escapeRegex(item.name)}$`, $options: "i" },
     });
 
     if (!exists) {
-      await categoryModel.create({ name });
+      await categoryModel.create(item);
+    } else {
+      let changed = false;
+
+      if (!exists.section || exists.section === "other") {
+        exists.section = item.section;
+        changed = true;
+      }
+
+      if (!Array.isArray(exists.matchWith) || exists.matchWith.length === 0) {
+        exists.matchWith = item.matchWith;
+        changed = true;
+      }
+
+      if (changed) await exists.save();
     }
   }
 };
@@ -59,7 +98,7 @@ export const listCategories = async (req, res) => {
 
 export const addCategory = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, section = "other", matchWith = "[]" } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({
@@ -70,6 +109,15 @@ export const addCategory = async (req, res) => {
 
     const cleanName = name.trim();
 
+    let parsedMatchWith = [];
+    try {
+      parsedMatchWith = Array.isArray(matchWith)
+        ? matchWith
+        : JSON.parse(matchWith || "[]");
+    } catch {
+      parsedMatchWith = [];
+    }
+
     const exists = await categoryModel.findOne({
       name: { $regex: `^${escapeRegex(cleanName)}$`, $options: "i" },
     });
@@ -77,6 +125,8 @@ export const addCategory = async (req, res) => {
     if (exists) {
       if (!exists.isActive) {
         exists.isActive = true;
+        exists.section = section;
+        exists.matchWith = parsedMatchWith;
 
         if (req.file) {
           exists.image = await uploadCategoryImage(req.file);
@@ -102,6 +152,8 @@ export const addCategory = async (req, res) => {
     const category = await categoryModel.create({
       name: cleanName,
       image,
+      section,
+      matchWith: parsedMatchWith,
     });
 
     res.json({
@@ -121,7 +173,7 @@ export const addCategory = async (req, res) => {
 export const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, section, matchWith } = req.body;
 
     const updateData = {};
 
@@ -134,6 +186,20 @@ export const updateCategory = async (req, res) => {
       }
 
       updateData.name = name.trim();
+    }
+
+    if (section !== undefined) {
+      updateData.section = section;
+    }
+
+    if (matchWith !== undefined) {
+      try {
+        updateData.matchWith = Array.isArray(matchWith)
+          ? matchWith
+          : JSON.parse(matchWith || "[]");
+      } catch {
+        updateData.matchWith = [];
+      }
     }
 
     if (req.file) {

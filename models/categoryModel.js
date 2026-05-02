@@ -12,6 +12,15 @@ const categorySchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    section: {
+      type: String,
+      enum: ["top", "bottom", "both", "other"],
+      default: "other",
+    },
+    matchWith: {
+      type: [String],
+      default: [],
+    },
     isActive: {
       type: Boolean,
       default: true,
