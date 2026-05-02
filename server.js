@@ -45,24 +45,19 @@ const heroDir = path.join(__dirname, "uploads", "hero");
    CORS CONFIG (UPDATED)
 ================================ */
 const allowedOrigins = [
-  // LOCAL
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
   "http://localhost:8081",
-
-  // OLD VERCEL (keep for safety)
   "https://saint-clothing-frontend.vercel.app",
   "https://saint-clothing-admin.vercel.app",
-
-  // NEW DOMAIN (IMPORTANT)
   "https://saintclothingbrandph.com",
   "https://www.saintclothingbrandph.com",
-
-  // ENV (dynamic)
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
 ].filter(Boolean);
+
+console.log("ALLOWED ORIGINS:", allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
