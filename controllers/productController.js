@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import { addLog, getActorName } from "../utils/activityLogger.js";
 import uploadBufferToCloudinary, {
   uploadProductImageToCloudinary,
+  uploadRawFileToCloudinary,
 } from "../utils/cloudinaryUpload.js";
 
 const SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"];
@@ -61,10 +62,12 @@ const clampSalePercent = (value) => {
 const parseArrayField = (value, fallback = []) => {
   try {
     if (Array.isArray(value)) return value;
+
     if (typeof value === "string") {
       const parsed = JSON.parse(value);
       return Array.isArray(parsed) ? parsed : fallback;
     }
+
     return fallback;
   } catch {
     return fallback;
@@ -83,6 +86,7 @@ const parseObjectField = (value, fallback = {}) => {
 
     if (typeof value === "string") {
       const parsed = JSON.parse(value);
+
       return typeof parsed === "object" && !Array.isArray(parsed)
         ? parsed
         : fallback;
@@ -108,6 +112,7 @@ const getSizeQty = (obj, size) => {
 const normalizeRecommendationSection = (value) => {
   const allowed = ["top", "bottom", "both", "none"];
   const normalized = String(value || "none").trim().toLowerCase();
+
   return allowed.includes(normalized) ? normalized : "none";
 };
 
@@ -119,9 +124,11 @@ const formatProductName = (product) =>
 const resolveBranchCode = async (req, requestedBranch) => {
   if (!isAdmin(req)) {
     const userBranch = normalizeBranchCode(req.user?.branch);
+
     if (!userBranch) {
       throw new Error("No branch assigned to this account");
     }
+
     return userBranch;
   }
 
@@ -161,12 +168,26 @@ const uploadSingleIfExists = async (
   return result.secure_url;
 };
 
+const uploadModelIfExists = async (file) => {
+  if (!file?.buffer) return "";
+
+  const result = await uploadRawFileToCloudinary(
+    file.buffer,
+    "saint-clothing/models"
+  );
+
+  return result.secure_url;
+};
+
 const getMapValue = (mapLike, key) => {
   const sizeKey = String(key || "").toUpperCase();
 
   if (mapLike instanceof Map) {
     const exact = mapLike.get(sizeKey);
-    if (exact !== undefined && exact !== null) return Number(exact) || 0;
+
+    if (exact !== undefined && exact !== null) {
+      return Number(exact) || 0;
+    }
 
     const foundKey = Array.from(mapLike.keys()).find(
       (item) => String(item).trim().toUpperCase() === sizeKey
@@ -347,10 +368,7 @@ const addProduct = async (req, res) => {
       : "";
 
     const model3d = req.files?.model3d?.[0]
-      ? await uploadSingleIfExists(
-          req.files.model3d[0],
-          "saint-clothing/models"
-        )
+      ? await uploadModelIfExists(req.files.model3d[0])
       : "";
 
     const sizeChartImage = req.files?.sizeChartImage?.[0]
@@ -569,20 +587,28 @@ const updateProduct = async (req, res) => {
 
     const updateData = {};
 
-    if (req.body.name !== undefined)
+    if (req.body.name !== undefined) {
       updateData.name = String(req.body.name).trim();
+    }
 
-    if (req.body.sku !== undefined)
+    if (req.body.sku !== undefined) {
       updateData.sku = String(req.body.sku).trim();
+    }
 
-    if (req.body.groupCode !== undefined)
+    if (req.body.groupCode !== undefined) {
       updateData.groupCode = String(req.body.groupCode).trim();
+    }
 
     if (req.body.color !== undefined) updateData.color = req.body.color;
     if (req.body.colorHex !== undefined) updateData.colorHex = req.body.colorHex;
-    if (req.body.description !== undefined)
+
+    if (req.body.description !== undefined) {
       updateData.description = req.body.description;
-    if (req.body.category !== undefined) updateData.category = req.body.category;
+    }
+
+    if (req.body.category !== undefined) {
+      updateData.category = req.body.category;
+    }
 
     if (req.body.price !== undefined) {
       updateData.price = parseNumber(req.body.price, existingProduct.price);
@@ -798,10 +824,7 @@ const updateProduct = async (req, res) => {
     }
 
     if (req.files?.model3d?.[0]) {
-      updateData.model3d = await uploadSingleIfExists(
-        req.files.model3d[0],
-        "saint-clothing/models"
-      );
+      updateData.model3d = await uploadModelIfExists(req.files.model3d[0]);
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
@@ -1137,7 +1160,7 @@ const deductStock = async (req, res) => {
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: `Product not found`,
+          message: "Product not found",
         });
       }
 
@@ -1176,6 +1199,7 @@ const deductStock = async (req, res) => {
 
       if (preorderMode) {
         const currentPreorderQty = getPreorderValue(product, sizeKey);
+
         setMapValue(
           product,
           "preorderStock",
@@ -1184,6 +1208,7 @@ const deductStock = async (req, res) => {
         );
       } else {
         const currentQty = getStockValue(product, sizeKey);
+
         setMapValue(product, "stock", sizeKey, currentQty - qty);
       }
 
@@ -1261,6 +1286,7 @@ const canUserReviewProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("CAN REVIEW ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -1367,6 +1393,7 @@ const addReview = async (req, res) => {
     });
   } catch (error) {
     console.error("ADD REVIEW ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
