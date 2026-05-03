@@ -28,7 +28,11 @@ const orderItemSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "user", required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "user",
+      required: true,
+    },
 
     items: [orderItemSchema],
 
@@ -96,6 +100,21 @@ const orderSchema = new mongoose.Schema(
     isPreorder: {
       type: Boolean,
       default: false,
+    },
+
+    // Delivery estimate for normal orders and preorder orders
+    deliveryEstimate: {
+      minDays: { type: Number, default: 0 },
+      maxDays: { type: Number, default: 0 },
+      label: { type: String, default: "" },
+      range: { type: String, default: "" },
+      shipsOn: { type: Date, default: null },
+    },
+
+    // Main preorder ship date shown as "Ships on [date]"
+    preorderShipDate: {
+      type: Date,
+      default: null,
     },
 
     date: {

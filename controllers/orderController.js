@@ -32,6 +32,12 @@ const normalizePaymentMethod = (method) => {
 
 const isAdmin = (req) => req.user?.role === "admin";
 
+const addDays = (date, days) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+
 const normalizeAddress = (address = {}) => ({
   firstName: address?.firstName || "",
   lastName: address?.lastName || "",
@@ -264,9 +270,7 @@ const deductOrderStock = async (items) => {
 
       await addLog({
         action: "ORDER_PREORDER_STOCK_DEDUCTED",
-        message: `Pre-order stock deducted for order item: ${
-          product.name
-        } (${sizeKey}) -${quantity}`,
+        message: `Pre-order stock deducted for order item: ${product.name} (${sizeKey}) -${quantity}`,
         user: "System",
         entityId: product._id,
         entityType: "Product",
@@ -286,9 +290,7 @@ const deductOrderStock = async (items) => {
 
       await addLog({
         action: "ORDER_STOCK_DEDUCTED",
-        message: `Stock deducted for order item: ${
-          product.name
-        } (${sizeKey}) -${quantity}`,
+        message: `Stock deducted for order item: ${product.name} (${sizeKey}) -${quantity}`,
         user: "System",
         entityId: product._id,
         entityType: "Product",
@@ -319,9 +321,7 @@ const restoreOrderStock = async (items) => {
 
       await addLog({
         action: "ORDER_PREORDER_STOCK_RESTORED",
-        message: `Pre-order stock restored for order item: ${
-          product.name
-        } (${sizeKey}) +${quantity}`,
+        message: `Pre-order stock restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
         user: "System",
         entityId: product._id,
         entityType: "Product",
@@ -334,9 +334,7 @@ const restoreOrderStock = async (items) => {
 
       await addLog({
         action: "ORDER_STOCK_RESTORED",
-        message: `Stock restored for order item: ${
-          product.name
-        } (${sizeKey}) +${quantity}`,
+        message: `Stock restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
         user: "System",
         entityId: product._id,
         entityType: "Product",
@@ -347,7 +345,8 @@ const restoreOrderStock = async (items) => {
 
 const placeOrder = async (req, res) => {
   try {
-    const { userId, items, amount, address, paymentMethod } = req.body;
+    const { userId, items, amount, address, paymentMethod, deliveryEstimate } =
+      req.body;
 
     if (!userId) {
       return res.status(400).json({
@@ -364,12 +363,47 @@ const placeOrder = async (req, res) => {
     }
 
     const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
+
     const { orderBranch, normalizedItems } = await validateAndNormalizeItems(
       items
     );
+
     const normalizedAddress = normalizeAddress(address);
 
     const hasPreorderItems = normalizedItems.some((item) => item.isPreorder);
+
+    if (hasPreorderItems && normalizedPaymentMethod === "COD") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Cash on Delivery is not available for pre-order items. Please use GCash, Maya, or GoTyme.",
+      });
+    }
+
+    const latestRestockDate = normalizedItems
+      .filter((item) => item.isPreorder && item.expectedRestockDate)
+      .map((item) => new Date(item.expectedRestockDate))
+      .sort((a, b) => b - a)[0];
+
+    const preorderShipDate = hasPreorderItems
+      ? addDays(latestRestockDate || new Date(), 2)
+      : null;
+
+    const finalDeliveryEstimate = hasPreorderItems
+      ? {
+          minDays: Number(deliveryEstimate?.minDays || 5),
+          maxDays: Number(deliveryEstimate?.maxDays || 7),
+          label: "Pre-order delivery",
+          range: deliveryEstimate?.range || "",
+          shipsOn: preorderShipDate,
+        }
+      : {
+          minDays: Number(deliveryEstimate?.minDays || 0),
+          maxDays: Number(deliveryEstimate?.maxDays || 0),
+          label: deliveryEstimate?.label || "",
+          range: deliveryEstimate?.range || "",
+          shipsOn: null,
+        };
 
     const newOrder = new orderModel({
       userId,
@@ -382,14 +416,14 @@ const placeOrder = async (req, res) => {
         normalizedPaymentMethod === "COD" ? "cod_pending" : "pending",
       status:
         normalizedPaymentMethod === "COD"
-          ? hasPreorderItems
-            ? "Order Placed"
-            : "Order Placed"
+          ? "Order Placed"
           : "Pending Payment",
       branch: orderBranch,
       referenceNumber: "",
       paymentProofImage: "",
       isPreorder: hasPreorderItems,
+      deliveryEstimate: finalDeliveryEstimate,
+      preorderShipDate,
       date: Date.now(),
     });
 
@@ -417,6 +451,8 @@ const placeOrder = async (req, res) => {
         : "Order placed successfully",
       orderId: newOrder._id,
       isPreorder: hasPreorderItems,
+      preorderShipDate,
+      deliveryEstimate: finalDeliveryEstimate,
     });
   } catch (error) {
     console.error("ORDER ERROR:", error);
@@ -790,7 +826,7 @@ const cancelOrder = async (req, res) => {
       });
     }
 
-    if (order.paymentMethod === "COD" && order.status !== "Cancelled") {
+    if (order.status !== "Cancelled") {
       await restoreOrderStock(order.items);
     }
 
