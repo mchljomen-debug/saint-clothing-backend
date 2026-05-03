@@ -6,8 +6,8 @@ import mongoose from "mongoose";
 import { addLog, getActorName } from "../utils/activityLogger.js";
 import uploadBufferToCloudinary, {
   uploadProductImageToCloudinary,
-  uploadRawFileToCloudinary,
 } from "../utils/cloudinaryUpload.js";
+import { uploadModelToSupabase } from "../utils/supabaseUpload.js";
 
 const SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"];
 
@@ -171,12 +171,7 @@ const uploadSingleIfExists = async (
 const uploadModelIfExists = async (file) => {
   if (!file?.buffer) return "";
 
-  const result = await uploadRawFileToCloudinary(
-    file.buffer,
-    "saint-clothing/models"
-  );
-
-  return result.secure_url;
+  return await uploadModelToSupabase(file);
 };
 
 const getMapValue = (mapLike, key) => {
