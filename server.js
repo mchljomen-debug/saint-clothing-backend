@@ -45,32 +45,34 @@ const heroDir = path.join(__dirname, "uploads", "hero");
    CORS CONFIG (UPDATED)
 ================================ */
 const allowedOrigins = [
-  "http://localhost:8081",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
+  "http://localhost:8081",
   "https://saint-clothing-frontend.vercel.app",
   "https://saint-clothing-admin.vercel.app",
   "https://saintclothingbrandph.com",
   "https://www.saintclothingbrandph.com",
-  "saintclothingbrandph.com",
-];
+    "saintclothingbrandph.com",
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_URL,
+].filter(Boolean);
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    const cleanOrigin = origin.replace(/\/$/, "");
 
-      console.log("Blocked by CORS:", origin);
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
+    if (allowedOrigins.includes(cleanOrigin)) {
+      return callback(null, true);
+    }
+
+    console.log("Blocked by CORS:", origin);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+};
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
