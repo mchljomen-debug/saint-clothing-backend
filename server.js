@@ -3,7 +3,7 @@ import cors from "cors";
 import "dotenv/config";
 import connectDB from "./config/mongodb.js";
 import connectCloudinary from "./config/cloudinary.js";
-
+import socialFeedRouter from "./routes/socialFeedRoute.js";
 import heroRouter from "./routes/heroRoute.js";
 import userRouter from "./routes/userRoute.js";
 import productRouter from "./routes/productRoute.js";
@@ -83,7 +83,7 @@ app.options("*", cors(corsOptions));
 ================================ */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use("/api/social-feed", socialFeedRouter);
 app.use("/uploads", express.static(uploadsDir));
 
 /* ===============================
