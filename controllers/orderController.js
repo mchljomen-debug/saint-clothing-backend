@@ -591,6 +591,7 @@ const approveManualPayment = async (req, res) => {
     order.payment = true;
     order.paymentStatus = "paid";
     order.status = "Order Placed";
+
     await order.save();
 
     await addLog({
@@ -652,6 +653,7 @@ const rejectManualPayment = async (req, res) => {
     order.payment = false;
     order.paymentStatus = "failed";
     order.status = "Payment Failed";
+
     await order.save();
 
     await addLog({
@@ -724,11 +726,25 @@ const updateStatus = async (req, res) => {
     }
 
     const normalized = normalizeStatus(status);
+    const method = normalizePaymentMethod(order.paymentMethod);
+    const currentPaymentStatus = String(order.paymentStatus || "")
+      .trim()
+      .toLowerCase();
+
     order.status = normalized;
 
-    if (normalized === "Delivered" && order.paymentMethod === "COD") {
-      order.payment = true;
-      order.paymentStatus = "paid";
+    if (normalized === "Delivered") {
+      if (method === "COD") {
+        order.payment = true;
+        order.paymentStatus = "paid";
+      }
+
+      if (["GCash", "Maya", "GoTyme"].includes(method)) {
+        if (currentPaymentStatus === "verifying" || currentPaymentStatus === "paid") {
+          order.payment = true;
+          order.paymentStatus = "paid";
+        }
+      }
     }
 
     await order.save();
@@ -761,6 +777,10 @@ const receiveOrder = async (req, res) => {
     }
 
     const currentStatus = normalizeStatus(order.status);
+    const method = normalizePaymentMethod(order.paymentMethod);
+    const currentPaymentStatus = String(order.paymentStatus || "")
+      .trim()
+      .toLowerCase();
 
     if (currentStatus !== "Out for Delivery") {
       return res.status(400).json({
@@ -771,9 +791,16 @@ const receiveOrder = async (req, res) => {
 
     order.status = "Delivered";
 
-    if (order.paymentMethod === "COD") {
+    if (method === "COD") {
       order.payment = true;
       order.paymentStatus = "paid";
+    }
+
+    if (["GCash", "Maya", "GoTyme"].includes(method)) {
+      if (currentPaymentStatus === "verifying" || currentPaymentStatus === "paid") {
+        order.payment = true;
+        order.paymentStatus = "paid";
+      }
     }
 
     await order.save();
