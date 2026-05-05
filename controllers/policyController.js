@@ -1,9 +1,12 @@
 import policyModel from "../models/policyModel.js";
-import { addLog } from "../utils/activityLogger.js";
+import { addLog, getActorName } from "../utils/activityLogger.js";
 
 const TERMS_KEY = "terms-and-conditions";
 const PRIVACY_KEY = "privacy-policy";
 
+/* ==============================
+   NORMALIZE CONTENT
+============================== */
 const normalizeContent = (content = []) => {
   if (!Array.isArray(content)) return [];
 
@@ -24,6 +27,9 @@ const normalizeContent = (content = []) => {
     .filter((item) => item.title || item.text);
 };
 
+/* ==============================
+   DEFAULT POLICY
+============================== */
 const defaultPayload = {
   slug: "main",
   version: new Date().toISOString().slice(0, 10),
@@ -32,7 +38,7 @@ const defaultPayload = {
     "Store rules, terms, privacy, shipping, returns, and payment policies.",
   policies: [
     {
-      key: "privacy-policy",
+      key: PRIVACY_KEY,
       title: "Privacy Policy",
       content: [],
       requiredOnRegister: false,
@@ -47,33 +53,12 @@ const defaultPayload = {
       sortOrder: 2,
       isActive: true,
     },
-    {
-      key: "shipping-policy",
-      title: "Shipping Policy",
-      content: [],
-      requiredOnRegister: false,
-      sortOrder: 3,
-      isActive: true,
-    },
-    {
-      key: "return-refund-policy",
-      title: "Return and Refund Policy",
-      content: [],
-      requiredOnRegister: false,
-      sortOrder: 4,
-      isActive: true,
-    },
-    {
-      key: "payment-policy",
-      title: "Payment Policy",
-      content: [],
-      requiredOnRegister: false,
-      sortOrder: 5,
-      isActive: true,
-    },
   ],
 };
 
+/* ==============================
+   ENSURE MAIN POLICY EXISTS
+============================== */
 const ensureMainPolicy = async () => {
   let doc = await policyModel.findOne({ slug: "main" });
 
@@ -84,6 +69,9 @@ const ensureMainPolicy = async () => {
   return doc;
 };
 
+/* ==============================
+   GET ALL POLICIES
+============================== */
 export const getPolicies = async (req, res) => {
   try {
     const doc = await ensureMainPolicy();
@@ -117,6 +105,9 @@ export const getPolicies = async (req, res) => {
   }
 };
 
+/* ==============================
+   GET TERMS
+============================== */
 export const getTermsPolicy = async (req, res) => {
   try {
     const doc = await ensureMainPolicy();
@@ -142,6 +133,9 @@ export const getTermsPolicy = async (req, res) => {
   }
 };
 
+/* ==============================
+   GET PRIVACY
+============================== */
 export const getPrivacyPolicy = async (req, res) => {
   try {
     const doc = await ensureMainPolicy();
@@ -166,12 +160,18 @@ export const getPrivacyPolicy = async (req, res) => {
   }
 };
 
+/* ==============================
+   UPDATE POLICIES (WITH HISTORY)
+============================== */
 export const updatePolicies = async (req, res) => {
   try {
     const { title, description, version, policies } = req.body;
 
     const doc = await ensureMainPolicy();
 
+    /* ==============================
+       UPDATE MAIN INFO
+    ============================== */
     if (typeof title === "string") {
       doc.title = title.trim() || doc.title;
     }
@@ -184,6 +184,9 @@ export const updatePolicies = async (req, res) => {
       doc.version = version.trim();
     }
 
+    /* ==============================
+       UPDATE POLICIES LIST
+    ============================== */
     if (Array.isArray(policies)) {
       doc.policies = policies.map((item, index) => {
         const key = String(item.key || `policy-${index + 1}`)
@@ -202,13 +205,15 @@ export const updatePolicies = async (req, res) => {
       });
     }
 
-    doc.updatedBy = req.body.updatedBy || req.body.userId || "admin";
     await doc.save();
 
+    /* ==============================
+       🔥 ACTIVITY LOG (FIXED)
+    ============================== */
     await addLog({
       action: "POLICIES_UPDATED",
-      message: `Policies updated to version ${doc.version}`,
-      user: doc.updatedBy,
+      message: `Policies updated (Version: ${doc.version})`,
+      user: getActorName(req),
       entityId: doc._id,
       entityType: "Policy",
     });

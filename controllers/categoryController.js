@@ -1,54 +1,34 @@
 import categoryModel from "../models/categoryModel.js";
 import uploadBufferToCloudinary from "../utils/cloudinaryUpload.js";
+import { addLog, getActorName } from "../utils/activityLogger.js";
 
+/* ==============================
+   DEFAULT SEED
+============================== */
 const DEFAULT_CATEGORIES = [
-  {
-    name: "Tshirt",
-    section: "top",
-    matchWith: ["Jorts", "Mesh Shorts", "Pants", "Long Sleeve", "Crop Jersey"],
-  },
-  {
-    name: "Long Sleeve",
-    section: "top",
-    matchWith: ["Tshirt", "Jorts", "Mesh Shorts", "Pants"],
-  },
-  {
-    name: "Jorts",
-    section: "bottom",
-    matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"],
-  },
-  {
-    name: "Mesh Shorts",
-    section: "bottom",
-    matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"],
-  },
-  {
-    name: "Crop Jersey",
-    section: "top",
-    matchWith: ["Jorts", "Mesh Shorts", "Pants", "Long Sleeve"],
-  },
-  {
-    name: "Pants",
-    section: "bottom",
-    matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"],
-  },
+  { name: "Tshirt", section: "top", matchWith: ["Jorts", "Mesh Shorts", "Pants", "Long Sleeve", "Crop Jersey"] },
+  { name: "Long Sleeve", section: "top", matchWith: ["Tshirt", "Jorts", "Mesh Shorts", "Pants"] },
+  { name: "Jorts", section: "bottom", matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"] },
+  { name: "Mesh Shorts", section: "bottom", matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"] },
+  { name: "Crop Jersey", section: "top", matchWith: ["Jorts", "Mesh Shorts", "Pants", "Long Sleeve"] },
+  { name: "Pants", section: "bottom", matchWith: ["Tshirt", "Long Sleeve", "Crop Jersey"] },
 ];
 
-const escapeRegex = (text) => {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-};
+const escapeRegex = (text) =>
+  String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const uploadCategoryImage = async (file) => {
   if (!file?.buffer) return "";
-
   const result = await uploadBufferToCloudinary(
     file.buffer,
     "saint-clothing/categories"
   );
-
   return result.secure_url;
 };
 
+/* ==============================
+   SEED DEFAULT
+============================== */
 export const seedDefaultCategories = async () => {
   for (const item of DEFAULT_CATEGORIES) {
     const exists = await categoryModel.findOne({
@@ -75,6 +55,9 @@ export const seedDefaultCategories = async () => {
   }
 };
 
+/* ==============================
+   LIST
+============================== */
 export const listCategories = async (req, res) => {
   try {
     await seedDefaultCategories();
@@ -83,19 +66,16 @@ export const listCategories = async (req, res) => {
       .find({ isActive: true })
       .sort({ createdAt: 1 });
 
-    res.json({
-      success: true,
-      categories,
-    });
+    res.json({ success: true, categories });
   } catch (error) {
     console.error("LIST CATEGORIES ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
+/* ==============================
+   ADD
+============================== */
 export const addCategory = async (req, res) => {
   try {
     const { name, section = "other", matchWith = "[]" } = req.body;
@@ -122,25 +102,34 @@ export const addCategory = async (req, res) => {
       name: { $regex: `^${escapeRegex(cleanName)}$`, $options: "i" },
     });
 
-    if (exists) {
-      if (!exists.isActive) {
-        exists.isActive = true;
-        exists.section = section;
-        exists.matchWith = parsedMatchWith;
+    /* RESTORE */
+    if (exists && !exists.isActive) {
+      exists.isActive = true;
+      exists.section = section;
+      exists.matchWith = parsedMatchWith;
 
-        if (req.file) {
-          exists.image = await uploadCategoryImage(req.file);
-        }
-
-        await exists.save();
-
-        return res.json({
-          success: true,
-          message: "Category restored",
-          category: exists,
-        });
+      if (req.file) {
+        exists.image = await uploadCategoryImage(req.file);
       }
 
+      await exists.save();
+
+      await addLog({
+        action: "CATEGORY_RESTORED",
+        message: `Category "${exists.name}" restored`,
+        user: getActorName(req),
+        entityId: exists._id,
+        entityType: "Category",
+      });
+
+      return res.json({
+        success: true,
+        message: "Category restored",
+        category: exists,
+      });
+    }
+
+    if (exists) {
       return res.status(400).json({
         success: false,
         message: "Category already exists",
@@ -156,6 +145,14 @@ export const addCategory = async (req, res) => {
       matchWith: parsedMatchWith,
     });
 
+    await addLog({
+      action: "CATEGORY_CREATED",
+      message: `Category "${category.name}" created`,
+      user: getActorName(req),
+      entityId: category._id,
+      entityType: "Category",
+    });
+
     res.json({
       success: true,
       message: "Category added",
@@ -163,60 +160,57 @@ export const addCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("ADD CATEGORY ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
+/* ==============================
+   UPDATE
+============================== */
 export const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, section, matchWith } = req.body;
 
-    const updateData = {};
-
-    if (name !== undefined) {
-      if (!name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: "Category name is required",
-        });
-      }
-
-      updateData.name = name.trim();
-    }
-
-    if (section !== undefined) {
-      updateData.section = section;
-    }
-
-    if (matchWith !== undefined) {
-      try {
-        updateData.matchWith = Array.isArray(matchWith)
-          ? matchWith
-          : JSON.parse(matchWith || "[]");
-      } catch {
-        updateData.matchWith = [];
-      }
-    }
-
-    if (req.file) {
-      updateData.image = await uploadCategoryImage(req.file);
-    }
-
-    const category = await categoryModel.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    });
-
+    const category = await categoryModel.findById(id);
     if (!category) {
       return res.status(404).json({
         success: false,
         message: "Category not found",
       });
     }
+
+    const oldName = category.name;
+
+    if (name !== undefined) category.name = name.trim();
+    if (section !== undefined) category.section = section;
+
+    if (matchWith !== undefined) {
+      try {
+        category.matchWith = Array.isArray(matchWith)
+          ? matchWith
+          : JSON.parse(matchWith || "[]");
+      } catch {
+        category.matchWith = [];
+      }
+    }
+
+    if (req.file) {
+      category.image = await uploadCategoryImage(req.file);
+    }
+
+    await category.save();
+
+    await addLog({
+      action: "CATEGORY_UPDATED",
+      message:
+        oldName !== category.name
+          ? `Category "${oldName}" updated to "${category.name}"`
+          : `Category "${category.name}" updated`,
+      user: getActorName(req),
+      entityId: category._id,
+      entityType: "Category",
+    });
 
     res.json({
       success: true,
@@ -225,23 +219,16 @@ export const updateCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("UPDATE CATEGORY ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
+/* ==============================
+   DELETE (SOFT)
+============================== */
 export const deleteCategory = async (req, res) => {
   try {
     const { id } = req.body;
-
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Category ID is required",
-      });
-    }
 
     const category = await categoryModel.findByIdAndUpdate(
       id,
@@ -256,6 +243,14 @@ export const deleteCategory = async (req, res) => {
       });
     }
 
+    await addLog({
+      action: "CATEGORY_DELETED",
+      message: `Category "${category.name}" removed`,
+      user: getActorName(req),
+      entityId: category._id,
+      entityType: "Category",
+    });
+
     res.json({
       success: true,
       message: "Category removed",
@@ -263,9 +258,6 @@ export const deleteCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("DELETE CATEGORY ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };

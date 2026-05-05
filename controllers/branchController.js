@@ -24,17 +24,19 @@ export const createBranch = async (req, res) => {
   try {
     const { name, code, address, contactNumber, managerName } = req.body;
 
-    if (!name || !code) {
+    const normalizedName = String(name || "").trim();
+    const normalizedCode = String(code || "").trim().toLowerCase();
+
+    if (!normalizedName || !normalizedCode) {
       return res.status(400).json({
         success: false,
         message: "Branch name and code are required",
       });
     }
 
-    const normalizedName = String(name).trim();
-    const normalizedCode = String(code).trim().toLowerCase();
-
-    const existingBranch = await branchModel.findOne({ code: normalizedCode });
+    const existingBranch = await branchModel.findOne({
+      code: normalizedCode,
+    });
 
     if (existingBranch) {
       return res.status(400).json({
@@ -43,7 +45,7 @@ export const createBranch = async (req, res) => {
       });
     }
 
-    const newBranch = new branchModel({
+    const newBranch = await branchModel.create({
       name: normalizedName,
       code: normalizedCode,
       address: address ? String(address).trim() : "",
@@ -51,8 +53,6 @@ export const createBranch = async (req, res) => {
       managerName: managerName ? String(managerName).trim() : "",
       isActive: true,
     });
-
-    await newBranch.save();
 
     await addLog({
       action: "BRANCH_CREATED",
@@ -91,55 +91,76 @@ export const updateBranch = async (req, res) => {
       });
     }
 
-    const oldName = existingBranch.name;
-    const oldCode = existingBranch.code;
-    const oldStatus = existingBranch.isActive;
-    const oldManagerName = existingBranch.managerName;
-    const oldAddress = existingBranch.address;
-    const oldContactNumber = existingBranch.contactNumber;
+    const oldBranch = {
+      name: existingBranch.name,
+      code: existingBranch.code,
+      address: existingBranch.address,
+      contactNumber: existingBranch.contactNumber,
+      managerName: existingBranch.managerName,
+      isActive: existingBranch.isActive,
+    };
 
-    existingBranch.name =
-      name !== undefined ? String(name).trim() : existingBranch.name;
+    if (name !== undefined) {
+      const cleanName = String(name).trim();
 
-    existingBranch.address =
-      address !== undefined ? String(address).trim() : existingBranch.address;
+      if (!cleanName) {
+        return res.status(400).json({
+          success: false,
+          message: "Branch name cannot be empty",
+        });
+      }
 
-    existingBranch.contactNumber =
-      contactNumber !== undefined
-        ? String(contactNumber).trim()
-        : existingBranch.contactNumber;
+      existingBranch.name = cleanName;
+    }
 
-    existingBranch.managerName =
-      managerName !== undefined
-        ? String(managerName).trim()
-        : existingBranch.managerName;
+    if (address !== undefined) {
+      existingBranch.address = String(address).trim();
+    }
 
-    existingBranch.isActive =
-      isActive !== undefined
-        ? isActive === true || isActive === "true"
-        : existingBranch.isActive;
+    if (contactNumber !== undefined) {
+      existingBranch.contactNumber = String(contactNumber).trim();
+    }
+
+    if (managerName !== undefined) {
+      existingBranch.managerName = String(managerName).trim();
+    }
+
+    if (isActive !== undefined) {
+      existingBranch.isActive =
+        isActive === true || String(isActive).toLowerCase() === "true";
+    }
 
     await existingBranch.save();
 
+    let action = "BRANCH_UPDATED";
     let updateMessage = `Branch updated: ${existingBranch.name} (${existingBranch.code})`;
 
-    if (oldStatus !== existingBranch.isActive) {
+    if (oldBranch.isActive !== existingBranch.isActive) {
+      action = existingBranch.isActive
+        ? "BRANCH_REACTIVATED"
+        : "BRANCH_DEACTIVATED";
+
       updateMessage = existingBranch.isActive
         ? `Branch reactivated: ${existingBranch.name} (${existingBranch.code})`
         : `Branch deactivated: ${existingBranch.name} (${existingBranch.code})`;
-    } else if (oldName !== existingBranch.name) {
-      updateMessage = `Branch renamed: ${oldName} -> ${existingBranch.name} (${oldCode})`;
-    } else if (oldManagerName !== existingBranch.managerName) {
-      updateMessage = `Branch manager updated: ${existingBranch.name} (${existingBranch.code}) - ${oldManagerName || "None"} -> ${existingBranch.managerName || "None"}`;
+    } else if (oldBranch.name !== existingBranch.name) {
+      action = "BRANCH_RENAMED";
+      updateMessage = `Branch renamed: ${oldBranch.name} -> ${existingBranch.name} (${existingBranch.code})`;
+    } else if (oldBranch.managerName !== existingBranch.managerName) {
+      action = "BRANCH_MANAGER_UPDATED";
+      updateMessage = `Branch manager updated: ${existingBranch.name} (${existingBranch.code}) - ${
+        oldBranch.managerName || "None"
+      } -> ${existingBranch.managerName || "None"}`;
     } else if (
-      oldAddress !== existingBranch.address ||
-      oldContactNumber !== existingBranch.contactNumber
+      oldBranch.address !== existingBranch.address ||
+      oldBranch.contactNumber !== existingBranch.contactNumber
     ) {
+      action = "BRANCH_DETAILS_UPDATED";
       updateMessage = `Branch details updated: ${existingBranch.name} (${existingBranch.code})`;
     }
 
     await addLog({
-      action: "BRANCH_UPDATED",
+      action,
       message: updateMessage,
       user: getActorName(req, "Admin"),
       entityId: existingBranch._id,
@@ -147,7 +168,7 @@ export const updateBranch = async (req, res) => {
     });
 
     return res.json({
-      success: true, 
+      success: true,
       message: "Branch updated successfully",
       branch: existingBranch,
     });
