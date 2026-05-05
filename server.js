@@ -53,7 +53,8 @@ const allowedOrigins = [
   "https://saint-clothing-admin.vercel.app",
   "https://saintclothingbrandph.com",
   "https://www.saintclothingbrandph.com",
-    "saintclothingbrandph.com",
+  "saintclothingbrandph.com",
+  "https://admin.saintclothingbrandph.com",
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
 ].filter(Boolean);
