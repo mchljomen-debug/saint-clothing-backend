@@ -36,7 +36,7 @@ orderRouter.post("/cancel", authUser, cancelOrder);
 // ==============================
 // ADMIN ROUTES
 // ==============================
-orderRouter.get("/list", adminAuth, allOrders); // ✅ changed POST → GET
+orderRouter.get("/list", adminAuth, allOrders);
 orderRouter.post("/status", adminAuth, updateStatus);
 orderRouter.post("/approve-payment", adminAuth, approveManualPayment);
 orderRouter.post("/reject-payment", adminAuth, rejectManualPayment);

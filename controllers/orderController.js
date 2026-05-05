@@ -70,42 +70,22 @@ const normalizeAddress = (address = {}) => ({
 });
 
 const getProductImage = (product, item) => {
-  if (item?.image && String(item.image).trim()) {
-    return String(item.image).trim();
-  }
-
-  if (Array.isArray(product?.images) && product.images.length > 0) {
-    return product.images[0];
-  }
-
-  if (product?.image && String(product.image).trim()) {
-    return String(product.image).trim();
-  }
-
+  if (item?.image && String(item.image).trim()) return String(item.image).trim();
+  if (Array.isArray(product?.images) && product.images.length > 0) return product.images[0];
+  if (product?.image && String(product.image).trim()) return String(product.image).trim();
   return "";
 };
 
-const getCustomerNameFromOrder = (order) => {
-  return (
-    `${order?.address?.firstName || ""} ${order?.address?.lastName || ""}`.trim() ||
-    "Customer"
-  );
-};
+const getCustomerNameFromOrder = (order) =>
+  `${order?.address?.firstName || ""} ${order?.address?.lastName || ""}`.trim() ||
+  "Customer";
 
-const getCustomerNameFromAddress = (address) => {
-  return (
-    `${address?.firstName || ""} ${address?.lastName || ""}`.trim() ||
-    "Customer"
-  );
-};
+const getCustomerNameFromAddress = (address) =>
+  `${address?.firstName || ""} ${address?.lastName || ""}`.trim() || "Customer";
 
 const getMapValue = (mapLike, key) => {
   const sizeKey = String(key || "").toUpperCase();
-
-  if (mapLike instanceof Map) {
-    return Number(mapLike.get(sizeKey) || 0);
-  }
-
+  if (mapLike instanceof Map) return Number(mapLike.get(sizeKey) || 0);
   return Number(mapLike?.[sizeKey] || 0);
 };
 
@@ -118,16 +98,11 @@ const setMapValue = (product, field, key, value) => {
     return;
   }
 
-  product[field] = {
-    ...(product[field] || {}),
-    [sizeKey]: safeValue,
-  };
+  product[field] = { ...(product[field] || {}), [sizeKey]: safeValue };
 };
 
 const getStockValue = (product, sizeKey) => getMapValue(product?.stock, sizeKey);
-
-const getPreorderValue = (product, sizeKey) =>
-  getMapValue(product?.preorderStock, sizeKey);
+const getPreorderValue = (product, sizeKey) => getMapValue(product?.preorderStock, sizeKey);
 
 const isPreorderMode = (product, sizeKey) => {
   const actualStock = getStockValue(product, sizeKey);
@@ -143,12 +118,9 @@ const isPreorderMode = (product, sizeKey) => {
 
 const shouldShowOrderInLists = (order) => {
   const method = normalizePaymentMethod(order?.paymentMethod);
-  const paymentStatus = String(order?.paymentStatus || "")
-    .trim()
-    .toLowerCase();
+  const paymentStatus = String(order?.paymentStatus || "").trim().toLowerCase();
 
   if (method === "COD") return true;
-
   return ["verifying", "paid", "failed"].includes(paymentStatus);
 };
 
@@ -167,14 +139,10 @@ const validateAndNormalizeItems = async (items) => {
 
     const productBranch = product.branch || "branch1";
 
-    if (!orderBranch) {
-      orderBranch = productBranch;
-    }
+    if (!orderBranch) orderBranch = productBranch;
 
     if (orderBranch !== productBranch) {
-      const err = new Error(
-        "All items in one checkout must be from the same branch"
-      );
+      const err = new Error("All items in one checkout must be from the same branch");
       err.statusCode = 400;
       throw err;
     }
@@ -199,14 +167,10 @@ const validateAndNormalizeItems = async (items) => {
     }
 
     if (preorderMode && preorderStock < quantity) {
-      const err = new Error(
-        `Pre-order stock not enough for ${product.name} (${sizeKey})`
-      );
+      const err = new Error(`Pre-order stock not enough for ${product.name} (${sizeKey})`);
       err.statusCode = 400;
       throw err;
     }
-
-    const savedImage = getProductImage(product, item);
 
     normalizedItems.push({
       ...item,
@@ -220,7 +184,7 @@ const validateAndNormalizeItems = async (items) => {
       category: item.category || product.category || "",
       sku: item.sku || product.sku || "",
       groupCode: item.groupCode || product.groupCode || "",
-      image: savedImage,
+      image: getProductImage(product, item),
       name: item.name || product.name || "",
       isPreorder: preorderMode,
       expectedRestockDate: product.preorderRestockDate || null,
@@ -252,20 +216,12 @@ const deductOrderStock = async (items) => {
       const availablePreorder = getPreorderValue(product, sizeKey);
 
       if (availablePreorder < quantity) {
-        const err = new Error(
-          `Pre-order stock issue for ${product.name} (${sizeKey})`
-        );
+        const err = new Error(`Pre-order stock issue for ${product.name} (${sizeKey})`);
         err.statusCode = 400;
         throw err;
       }
 
-      setMapValue(
-        product,
-        "preorderStock",
-        sizeKey,
-        availablePreorder - quantity
-      );
-
+      setMapValue(product, "preorderStock", sizeKey, availablePreorder - quantity);
       await product.save();
 
       await addLog({
@@ -285,7 +241,6 @@ const deductOrderStock = async (items) => {
       }
 
       setMapValue(product, "stock", sizeKey, available - quantity);
-
       await product.save();
 
       await addLog({
@@ -302,7 +257,6 @@ const deductOrderStock = async (items) => {
 const restoreOrderStock = async (items) => {
   for (const item of items) {
     const product = await Product.findById(item.productId);
-
     if (!product) continue;
 
     const sizeKey = String(item.size || "S").toUpperCase();
@@ -310,73 +264,47 @@ const restoreOrderStock = async (items) => {
 
     if (item.isPreorder) {
       const availablePreorder = getPreorderValue(product, sizeKey);
-      setMapValue(
-        product,
-        "preorderStock",
-        sizeKey,
-        availablePreorder + quantity
-      );
-
-      await product.save();
-
-      await addLog({
-        action: "ORDER_PREORDER_STOCK_RESTORED",
-        message: `Pre-order stock restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
-        user: "System",
-        entityId: product._id,
-        entityType: "Product",
-      });
+      setMapValue(product, "preorderStock", sizeKey, availablePreorder + quantity);
     } else {
       const available = getStockValue(product, sizeKey);
       setMapValue(product, "stock", sizeKey, available + quantity);
-
-      await product.save();
-
-      await addLog({
-        action: "ORDER_STOCK_RESTORED",
-        message: `Stock restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
-        user: "System",
-        entityId: product._id,
-        entityType: "Product",
-      });
     }
+
+    await product.save();
+
+    await addLog({
+      action: item.isPreorder
+        ? "ORDER_PREORDER_STOCK_RESTORED"
+        : "ORDER_STOCK_RESTORED",
+      message: `${item.isPreorder ? "Pre-order stock" : "Stock"} restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
+      user: "System",
+      entityId: product._id,
+      entityType: "Product",
+    });
   }
 };
 
 const placeOrder = async (req, res) => {
   try {
-    const { userId, items, amount, address, paymentMethod, deliveryEstimate } =
-      req.body;
+    const { userId, items, amount, address, paymentMethod, deliveryEstimate } = req.body;
 
     if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User identification failed",
-      });
+      return res.status(400).json({ success: false, message: "User identification failed" });
     }
 
     if (!items || !items.length) {
-      return res.status(400).json({
-        success: false,
-        message: "No order items provided",
-      });
+      return res.status(400).json({ success: false, message: "No order items provided" });
     }
 
     const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
-
-    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(
-      items
-    );
-
+    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(items);
     const normalizedAddress = normalizeAddress(address);
-
     const hasPreorderItems = normalizedItems.some((item) => item.isPreorder);
 
     if (hasPreorderItems && normalizedPaymentMethod === "COD") {
       return res.status(400).json({
         success: false,
-        message:
-          "Cash on Delivery is not available for pre-order items. Please use GCash, Maya, or GoTyme.",
+        message: "Cash on Delivery is not available for pre-order items. Please use GCash, Maya, or GoTyme.",
       });
     }
 
@@ -412,12 +340,8 @@ const placeOrder = async (req, res) => {
       amount,
       paymentMethod: normalizedPaymentMethod,
       payment: false,
-      paymentStatus:
-        normalizedPaymentMethod === "COD" ? "cod_pending" : "pending",
-      status:
-        normalizedPaymentMethod === "COD"
-          ? "Order Placed"
-          : "Pending Payment",
+      paymentStatus: normalizedPaymentMethod === "COD" ? "cod_pending" : "pending",
+      status: normalizedPaymentMethod === "COD" ? "Order Placed" : "Pending Payment",
       branch: orderBranch,
       referenceNumber: "",
       paymentProofImage: "",
@@ -446,9 +370,7 @@ const placeOrder = async (req, res) => {
 
     return res.json({
       success: true,
-      message: hasPreorderItems
-        ? "Pre-order placed successfully"
-        : "Order placed successfully",
+      message: hasPreorderItems ? "Pre-order placed successfully" : "Order placed successfully",
       orderId: newOrder._id,
       isPreorder: hasPreorderItems,
       preorderShipDate,
@@ -468,46 +390,19 @@ const submitPaymentProof = async (req, res) => {
     const { orderId, referenceNumber, paymentMethod } = req.body;
     const authUserId = req.userId || req.user?.id || req.user?._id;
 
-    if (!orderId) {
-      return res.status(400).json({
-        success: false,
-        message: "Order ID is required",
-      });
-    }
-
-    if (!referenceNumber?.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Reference number is required",
-      });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Payment proof image is required",
-      });
-    }
+    if (!orderId) return res.status(400).json({ success: false, message: "Order ID is required" });
+    if (!referenceNumber?.trim()) return res.status(400).json({ success: false, message: "Reference number is required" });
+    if (!req.file) return res.status(400).json({ success: false, message: "Payment proof image is required" });
 
     const order = await orderModel.findById(orderId);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     if (!authUserId || String(order.userId) !== String(authUserId)) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized access to this order",
-      });
+      return res.status(403).json({ success: false, message: "Unauthorized access to this order" });
     }
 
-    const normalizedPaymentMethod = normalizePaymentMethod(
-      paymentMethod || order.paymentMethod
-    );
+    const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod || order.paymentMethod);
 
     if (!["GCash", "Maya", "GoTyme"].includes(normalizedPaymentMethod)) {
       return res.status(400).json({
@@ -524,7 +419,6 @@ const submitPaymentProof = async (req, res) => {
     order.status = "Pending Payment";
 
     await order.save();
-
     await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
 
     await addLog({
@@ -543,31 +437,19 @@ const submitPaymentProof = async (req, res) => {
     });
   } catch (error) {
     console.error("SUBMIT PAYMENT PROOF ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 const approveManualPayment = async (req, res) => {
   try {
     const { orderId } = req.body;
-
     const order = await orderModel.findById(orderId);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     if (!isAdmin(req) && order.branch !== req.user?.branch) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied for this branch order",
-      });
+      return res.status(403).json({ success: false, message: "Access denied for this branch order" });
     }
 
     const method = normalizePaymentMethod(order.paymentMethod);
@@ -580,10 +462,7 @@ const approveManualPayment = async (req, res) => {
     }
 
     if (order.payment) {
-      return res.json({
-        success: true,
-        message: "Payment already approved",
-      });
+      return res.json({ success: true, message: "Payment already approved" });
     }
 
     await deductOrderStock(order.items);
@@ -624,21 +503,12 @@ const approveManualPayment = async (req, res) => {
 const rejectManualPayment = async (req, res) => {
   try {
     const { orderId } = req.body;
-
     const order = await orderModel.findById(orderId);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     if (!isAdmin(req) && order.branch !== req.user?.branch) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied for this branch order",
-      });
+      return res.status(403).json({ success: false, message: "Access denied for this branch order" });
     }
 
     const method = normalizePaymentMethod(order.paymentMethod);
@@ -668,10 +538,7 @@ const rejectManualPayment = async (req, res) => {
       entityType: "Order",
     });
 
-    return res.json({
-      success: true,
-      message: "Manual payment rejected",
-    });
+    return res.json({ success: true, message: "Manual payment rejected" });
   } catch (error) {
     console.error("REJECT MANUAL PAYMENT ERROR:", error);
     return res.status(error.statusCode || 500).json({
@@ -708,15 +575,9 @@ const userOrders = async (req, res) => {
 const updateStatus = async (req, res) => {
   try {
     const { orderId, status } = req.body;
-
     const order = await orderModel.findById(orderId);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     if (!isAdmin(req) && order.branch !== req.user?.branch) {
       return res.status(403).json({
@@ -727,24 +588,24 @@ const updateStatus = async (req, res) => {
 
     const normalized = normalizeStatus(status);
     const method = normalizePaymentMethod(order.paymentMethod);
-    const currentPaymentStatus = String(order.paymentStatus || "")
-      .trim()
-      .toLowerCase();
+    const currentPaymentStatus = String(order.paymentStatus || "").trim().toLowerCase();
+
+    if (
+      ["GCash", "Maya", "GoTyme"].includes(method) &&
+      currentPaymentStatus !== "paid" &&
+      ["Packing", "Shipped", "Out for Delivery", "Delivered"].includes(normalized)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot update delivery. Payment not approved yet.",
+      });
+    }
 
     order.status = normalized;
 
-    if (normalized === "Delivered") {
-      if (method === "COD") {
-        order.payment = true;
-        order.paymentStatus = "paid";
-      }
-
-      if (["GCash", "Maya", "GoTyme"].includes(method)) {
-        if (currentPaymentStatus === "verifying" || currentPaymentStatus === "paid") {
-          order.payment = true;
-          order.paymentStatus = "paid";
-        }
-      }
+    if (normalized === "Delivered" && method === "COD") {
+      order.payment = true;
+      order.paymentStatus = "paid";
     }
 
     await order.save();
@@ -766,21 +627,13 @@ const updateStatus = async (req, res) => {
 const receiveOrder = async (req, res) => {
   try {
     const { orderId, userId } = req.body;
-
     const order = await orderModel.findOne({ _id: orderId, userId });
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     const currentStatus = normalizeStatus(order.status);
     const method = normalizePaymentMethod(order.paymentMethod);
-    const currentPaymentStatus = String(order.paymentStatus || "")
-      .trim()
-      .toLowerCase();
+    const currentPaymentStatus = String(order.paymentStatus || "").trim().toLowerCase();
 
     if (currentStatus !== "Out for Delivery") {
       return res.status(400).json({
@@ -789,18 +642,21 @@ const receiveOrder = async (req, res) => {
       });
     }
 
+    if (
+      ["GCash", "Maya", "GoTyme"].includes(method) &&
+      currentPaymentStatus !== "paid"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot mark as received. Payment not approved yet.",
+      });
+    }
+
     order.status = "Delivered";
 
     if (method === "COD") {
       order.payment = true;
       order.paymentStatus = "paid";
-    }
-
-    if (["GCash", "Maya", "GoTyme"].includes(method)) {
-      if (currentPaymentStatus === "verifying" || currentPaymentStatus === "paid") {
-        order.payment = true;
-        order.paymentStatus = "paid";
-      }
     }
 
     await order.save();
@@ -813,15 +669,9 @@ const receiveOrder = async (req, res) => {
       entityType: "Order",
     });
 
-    return res.json({
-      success: true,
-      message: "Order marked as received",
-    });
+    return res.json({ success: true, message: "Order marked as received" });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -832,18 +682,10 @@ const cancelOrder = async (req, res) => {
 
     const order = await orderModel.findById(orderId);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     if (String(order.userId) !== String(authUserId)) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized",
-      });
+      return res.status(403).json({ success: false, message: "Unauthorized" });
     }
 
     if (["Delivered", "Shipped", "Out for Delivery"].includes(order.status)) {
@@ -876,16 +718,10 @@ const cancelOrder = async (req, res) => {
       entityType: "Order",
     });
 
-    return res.json({
-      success: true,
-      message: "Order cancelled successfully",
-    });
+    return res.json({ success: true, message: "Order cancelled successfully" });
   } catch (error) {
     console.error("CANCEL ORDER ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
