@@ -2,7 +2,7 @@ import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import Product from "../models/productModel.js";
 import { addLog, getActorName } from "../utils/activityLogger.js";
-import uploadBufferToCloudinary from "../utils/cloudinaryUploader.js";
+import uploadBufferToCloudinary from "../utils/cloudinaryUpload.js";
 
 const normalizeStatus = (status) => {
   const value = String(status || "").trim().toLowerCase();
