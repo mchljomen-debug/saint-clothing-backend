@@ -3,7 +3,9 @@ import { addLog, getActorName } from "../utils/activityLogger.js";
 
 export const getAllBranches = async (req, res) => {
   try {
-    const branches = await branchModel.find().sort({ createdAt: -1 });
+    const branches = await branchModel
+      .find({ isDeleted: { $ne: true } })
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -48,6 +50,9 @@ export const createBranch = async (req, res) => {
       contactNumber: contactNumber ? String(contactNumber).trim() : "",
       managerName: managerName ? String(managerName).trim() : "",
       isActive: true,
+      isDeleted: false,
+      deletedAt: null,
+      deletedBy: "",
     });
 
     await addLog({
@@ -79,7 +84,7 @@ export const updateBranch = async (req, res) => {
 
     const existingBranch = await branchModel.findById(id);
 
-    if (!existingBranch) {
+    if (!existingBranch || existingBranch.isDeleted) {
       return res.status(404).json({
         success: false,
         message: "Branch not found",
@@ -176,6 +181,109 @@ export const deleteBranch = async (req, res) => {
 
     const branch = await branchModel.findById(id);
 
+    if (!branch || branch.isDeleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Branch not found",
+      });
+    }
+
+    branch.isDeleted = true;
+    branch.deletedAt = new Date();
+    branch.deletedBy = getActorName(req, "Admin");
+    branch.isActive = false;
+
+    await branch.save();
+
+    await addLog({
+      action: "BRANCH_DELETED",
+      message: `Branch moved to trash: ${branch.name} (${branch.code})`,
+      user: getActorName(req, "Admin"),
+      entityId: branch._id,
+      entityType: "Branch",
+    });
+
+    return res.json({
+      success: true,
+      message: "Branch moved to trash successfully",
+      branch,
+    });
+  } catch (error) {
+    console.log("deleteBranch error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+export const getDeletedBranches = async (req, res) => {
+  try {
+    const branches = await branchModel
+      .find({ isDeleted: true })
+      .sort({ deletedAt: -1 });
+
+    return res.json({
+      success: true,
+      branches,
+    });
+  } catch (error) {
+    console.log("getDeletedBranches error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+export const restoreBranch = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const branch = await branchModel.findById(id);
+
+    if (!branch) {
+      return res.status(404).json({
+        success: false,
+        message: "Branch not found",
+      });
+    }
+
+    branch.isDeleted = false;
+    branch.deletedAt = null;
+    branch.deletedBy = "";
+    branch.isActive = true;
+
+    await branch.save();
+
+    await addLog({
+      action: "BRANCH_RESTORED",
+      message: `Branch restored: ${branch.name} (${branch.code})`,
+      user: getActorName(req, "Admin"),
+      entityId: branch._id,
+      entityType: "Branch",
+    });
+
+    return res.json({
+      success: true,
+      message: "Branch restored successfully",
+      branch,
+    });
+  } catch (error) {
+    console.log("restoreBranch error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+export const permanentDeleteBranch = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const branch = await branchModel.findById(id);
+
     if (!branch) {
       return res.status(404).json({
         success: false,
@@ -186,8 +294,8 @@ export const deleteBranch = async (req, res) => {
     await branchModel.findByIdAndDelete(id);
 
     await addLog({
-      action: "BRANCH_DELETED",
-      message: `Branch deleted: ${branch.name} (${branch.code})`,
+      action: "BRANCH_PERMANENTLY_DELETED",
+      message: `Branch permanently deleted: ${branch.name} (${branch.code})`,
       user: getActorName(req, "Admin"),
       entityId: branch._id,
       entityType: "Branch",
@@ -195,10 +303,10 @@ export const deleteBranch = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Branch deleted successfully",
+      message: "Branch permanently deleted",
     });
   } catch (error) {
-    console.log("deleteBranch error:", error);
+    console.log("permanentDeleteBranch error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
