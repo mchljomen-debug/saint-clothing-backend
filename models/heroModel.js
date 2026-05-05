@@ -11,7 +11,7 @@ const heroSlideSchema = new mongoose.Schema(
     cta: { type: String, default: "" },
     action: {
       type: String,
-      enum: ["collection", "bestseller", "latest"],
+      enum: ["collection", "bestseller", "latest", "ar"],
       default: "collection",
     },
     image: { type: String, default: "" },
@@ -24,32 +24,27 @@ const heroSlideSchema = new mongoose.Schema(
 ========================= */
 const heroSchema = new mongoose.Schema(
   {
-    /* TOGGLE TICKER */
     tickerEnabled: {
       type: Boolean,
       default: true,
     },
 
-    /* ✅ NEW USER GREETING */
     newUserGreeting: {
       type: String,
       default: "Welcome",
     },
 
-    /* ✅ RETURNING USER GREETING */
     returningUserGreeting: {
       type: String,
       default: "Welcome back",
     },
 
-    /* ✅ DYNAMIC TICKER TEXT */
     tickerText: {
       type: String,
       default:
-        "{greeting}, {name}! Ready to explore the latest from Saint Clothing?",
+        "{greeting}, {name}! Try our mobile AR fitting experience and explore the latest from Saint Clothing.",
     },
 
-    /* HERO SLIDES */
     slides: {
       type: [heroSlideSchema],
       default: [
@@ -63,8 +58,17 @@ const heroSchema = new mongoose.Schema(
           image: "",
         },
         {
+          title: "Virtual Try-On",
+          subtitle: "AR Fitting Experience On Mobile",
+          description:
+            "Preview selected Saint Clothing pieces through your phone using our mobile AR try-on feature.",
+          cta: "Try AR On Mobile",
+          action: "ar",
+          image: "",
+        },
+        {
           title: "Core Uniform",
-          subtitle: "Minimal Pieces. Strong Identity",
+          subtitle: "Minimal Pieces. Strong Identity.",
           description:
             "Everyday essentials refined for a sharper streetwear identity.",
           cta: "View Best Sellers",
@@ -88,9 +92,6 @@ const heroSchema = new mongoose.Schema(
   }
 );
 
-/* =========================
-   EXPORT MODEL
-========================= */
 const heroModel =
   mongoose.models.hero || mongoose.model("hero", heroSchema);
 

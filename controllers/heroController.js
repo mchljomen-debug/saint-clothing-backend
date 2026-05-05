@@ -12,9 +12,19 @@ const defaultSlides = [
     image: "",
   },
   {
+    title: "Virtual Try-On",
+    subtitle: "AR Fitting Experience On Mobile",
+    description:
+      "Preview selected Saint Clothing pieces through your phone using our mobile AR try-on feature.",
+    cta: "Try AR On Mobile",
+    action: "ar",
+    image: "",
+  },
+  {
     title: "Core Uniform",
     subtitle: "Minimal Pieces. Strong Identity.",
-    description: "Everyday essentials refined for a sharper streetwear identity.",
+    description:
+      "Everyday essentials refined for a sharper streetwear identity.",
     cta: "View Best Sellers",
     action: "bestseller",
     image: "",
@@ -29,6 +39,8 @@ const defaultSlides = [
     image: "",
   },
 ];
+
+const allowedActions = ["collection", "bestseller", "latest", "ar"];
 
 const uploadToCloudinary = (file) => {
   return new Promise((resolve, reject) => {
@@ -57,7 +69,7 @@ export const getHero = async (req, res) => {
         newUserGreeting: "Welcome",
         returningUserGreeting: "Welcome back",
         tickerText:
-          "{greeting}, {name}! Ready to explore the latest from Saint Clothing?",
+          "{greeting}, {name}! Try our mobile AR fitting experience and explore the latest from Saint Clothing.",
         slides: defaultSlides,
       });
     }
@@ -82,7 +94,7 @@ export const updateHero = async (req, res) => {
         newUserGreeting: "Welcome",
         returningUserGreeting: "Welcome back",
         tickerText:
-          "{greeting}, {name}! Ready to explore the latest from Saint Clothing?",
+          "{greeting}, {name}! Try our mobile AR fitting experience and explore the latest from Saint Clothing.",
         slides: defaultSlides,
       });
     }
@@ -103,7 +115,7 @@ export const updateHero = async (req, res) => {
 
     const mergedSlides = [];
 
-    for (let index = 0; index < 3; index++) {
+    for (let index = 0; index < 4; index++) {
       const oldSlide = oldSlides[index] || defaultSlides[index];
       const incoming = incomingSlides[index] || {};
       const fileKey = `image${index + 1}`;
@@ -120,7 +132,7 @@ export const updateHero = async (req, res) => {
         subtitle: incoming.subtitle ?? oldSlide.subtitle ?? "",
         description: incoming.description ?? oldSlide.description ?? "",
         cta: incoming.cta ?? oldSlide.cta ?? "",
-        action: ["collection", "bestseller", "latest"].includes(incoming.action)
+        action: allowedActions.includes(incoming.action)
           ? incoming.action
           : oldSlide.action || "collection",
         image: imageUrl,
@@ -135,7 +147,7 @@ export const updateHero = async (req, res) => {
 
     hero.tickerText =
       body.tickerText ||
-      "{greeting}, {name}! Ready to explore the latest from Saint Clothing?";
+      "{greeting}, {name}! Try our mobile AR fitting experience and explore the latest from Saint Clothing.";
 
     hero.slides = mergedSlides;
 
