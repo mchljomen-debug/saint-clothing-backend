@@ -1,226 +1,117 @@
-import mongoose from "mongoose";
+  import mongoose from "mongoose";
 
-/* =========================
-   ADDRESS SCHEMA
-========================= */
-const addressSchema = new mongoose.Schema(
-  {
-    houseUnit: { type: String, default: "" },
-    street: { type: String, default: "" },
-    barangay: { type: String, default: "" },
-    city: { type: String, default: "" },
-    province: { type: String, default: "" },
-    region: { type: String, default: "" },
-    zipcode: { type: String, default: "" },
-    country: { type: String, default: "Philippines" },
 
-    latitude: { type: Number, default: null },
-    longitude: { type: Number, default: null },
+  const addressSchema = new mongoose.Schema(
+    {
+      houseUnit: { type: String, default: "" },
+      street: { type: String, default: "" },
+      barangay: { type: String, default: "" },
+      city: { type: String, default: "" },
+      province: { type: String, default: "" },
+      region: { type: String, default: "" },
+      zipcode: { type: String, default: "" },
+      country: { type: String, default: "Philippines" },
 
-    psgcRegionCode: { type: String, default: "" },
-    psgcProvinceCode: { type: String, default: "" },
-    psgcMunicipalityCode: { type: String, default: "" },
-    psgcBarangayCode: { type: String, default: "" },
-  },
-  { _id: false }
-);
+      latitude: { type: Number, default: null },
+      longitude: { type: Number, default: null },
 
-/* =========================
-   STYLE PREFERENCES (AI / Tracking)
-========================= */
-const stylePreferencesSchema = new mongoose.Schema(
-  {
-    favoriteCategories: {
-      type: [String],
-      default: [],
+      psgcRegionCode: { type: String, default: "" },
+      psgcProvinceCode: { type: String, default: "" },
+      psgcMunicipalityCode: { type: String, default: "" },
+      psgcBarangayCode: { type: String, default: "" },
     },
-    favoriteColors: {
-      type: [String],
-      default: [],
-    },
-    favoriteStyleTags: {
-      type: [String],
-      default: [],
-    },
+    { _id: false }
+  );
 
-    recentViewedProducts: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "product",
+  const stylePreferencesSchema = new mongoose.Schema(
+    {
+      favoriteCategories: { type: [String], default: [] },
+      favoriteColors: { type: [String], default: [] },
+      favoriteStyleTags: { type: [String], default: [] },
+
+      recentViewedProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: "product" }],
+      recentCartProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: "product" }],
+      recentOrderedProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: "product" }],
+    },
+    { _id: false }
+  );
+
+  const preferencesSchema = new mongoose.Schema(
+    {
+      favoriteCategories: { type: [String], default: [] },
+      preferredSize: { type: String, default: "" },
+      preferredColors: { type: [String], default: [] },
+      notifyOrders: { type: Boolean, default: true },
+      notifyDrops: { type: Boolean, default: true },
+      defaultAddressId: { type: String, default: "" },
+    },
+    { _id: false }
+  );
+
+  const userSchema = new mongoose.Schema(
+    {
+      firstName: { type: String, default: "" },
+      lastName: { type: String, default: "" },
+      name: { type: String, default: "" },
+
+      email: { type: String, required: true, unique: true },
+      password: { type: String },
+
+      avatar: { type: String, default: "" },
+      phone: { type: String, default: "" },
+
+      address: {
+        type: addressSchema,
+        default: () => ({}),
       },
-    ],
-    recentCartProducts: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "product",
+
+      isVerified: { type: Boolean, default: false },
+      otpExpires: { type: Date },
+
+      resetPasswordOtp: { type: String, default: "" },
+      resetPasswordExpires: { type: Date, default: null },
+
+      cartData: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {},
       },
-    ],
-    recentOrderedProducts: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "product",
+
+      stylePreferences: {
+        type: stylePreferencesSchema,
+        default: () => ({}),
       },
-    ],
-  },
-  { _id: false }
-);
 
-/* =========================
-   USER PREFERENCES (UI Settings)
-========================= */
-const preferencesSchema = new mongoose.Schema(
-  {
-    favoriteCategories: {
-      type: [String],
-      default: [],
-    },
-    preferredSize: {
-      type: String,
-      default: "",
-    },
-    preferredColors: {
-      type: [String],
-      default: [],
-    },
-    notifyOrders: {
-      type: Boolean,
-      default: true,
-    },
-    notifyDrops: {
-      type: Boolean,
-      default: true,
-    },
-    defaultAddressId: {
-      type: String,
-      default: "",
-    },
-  },
-  { _id: false }
-);
+      preferences: {
+        type: preferencesSchema,
+        default: () => ({}),
+      },
 
-/* =========================
-   MAIN USER SCHEMA
-========================= */
-const userSchema = new mongoose.Schema(
-  {
-    /* BASIC INFO */
-    firstName: { type: String, default: "" },
-    lastName: { type: String, default: "" },
+      termsAccepted: { type: Boolean, default: false },
+      termsAcceptedAt: { type: Date, default: null },
+      termsAcceptedVersion: { type: String, default: "" },
 
-    // Optional combined name
-    name: { type: String, default: "" },
+      isBlocked: { type: Boolean, default: false },
+      blockedAt: { type: Date, default: null },
 
-    email: { type: String, required: true, unique: true },
-    password: { type: String },
+      isActive: { type: Boolean, default: true },
+      deactivatedAt: { type: Date, default: null },
 
-    /* PROFILE IMAGE (Cloudinary URL) */
-    avatar: {
-      type: String,
-      default: "", // will store full Cloudinary URL
+      isDeleted: { type: Boolean, default: false },
+      deletedAt: { type: Date, default: null },
+      deletedBy: { type: String, default: "" },
+
+      lastLoginAt: { type: Date, default: null },
+      lastSeenAt: { type: Date, default: null },
     },
+    {
+      timestamps: true,
+      minimize: false,
+    }
+  );
 
-    phone: { type: String, default: "" },
-    address: {
-      type: addressSchema,
-      default: () => ({}),
-    },
+  userSchema.index({ isDeleted: 1 });
 
-    /* AUTH / SECURITY */
-    isVerified: { type: Boolean, default: false },
-    otpExpires: { type: Date },
+  const userModel =
+    mongoose.models.User || mongoose.model("User", userSchema);
 
-    resetPasswordOtp: { type: String, default: "" },
-    resetPasswordExpires: { type: Date, default: null },
-
-    /* CART */
-    cartData: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
-    },
-
-    /* PERSONALIZATION */
-    stylePreferences: {
-      type: stylePreferencesSchema,
-      default: () => ({
-        favoriteCategories: [],
-        favoriteColors: [],
-        favoriteStyleTags: [],
-        recentViewedProducts: [],
-        recentCartProducts: [],
-        recentOrderedProducts: [],
-      }),
-    },
-
-    preferences: {
-      type: preferencesSchema,
-      default: () => ({
-        favoriteCategories: [],
-        preferredSize: "",
-        preferredColors: [],
-        notifyOrders: true,
-        notifyDrops: true,
-        defaultAddressId: "",
-      }),
-    },
-
-    /* TERMS */
-    termsAccepted: {
-      type: Boolean,
-      default: false,
-    },
-    termsAcceptedAt: {
-      type: Date,
-      default: null,
-    },
-
-    /* ACCOUNT STATUS */
-    isBlocked: {
-      type: Boolean,
-      default: false,
-    },
-    blockedAt: {
-      type: Date,
-      default: null,
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    deactivatedAt: {
-      type: Date,
-      default: null,
-    },
-
-    isDeleted: {
-      type: Boolean,
-      default: false,
-    },
-    deletedAt: {
-      type: Date,
-      default: null,
-    },
-
-    /* ACTIVITY */
-    lastLoginAt: {
-      type: Date,
-      default: null,
-    },
-    lastSeenAt: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-    minimize: false,
-  }
-);
-
-/* =========================
-   EXPORT MODEL
-========================= */
-const userModel =
-  mongoose.models.User || mongoose.model("User", userSchema);
-
-export default userModel;
+  export default userModel;

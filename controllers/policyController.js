@@ -4,9 +4,6 @@ import { addLog, getActorName } from "../utils/activityLogger.js";
 const TERMS_KEY = "terms-and-conditions";
 const PRIVACY_KEY = "privacy-policy";
 
-/* ==============================
-   NORMALIZE CONTENT
-============================== */
 const normalizeContent = (content = []) => {
   if (!Array.isArray(content)) return [];
 
@@ -27,15 +24,15 @@ const normalizeContent = (content = []) => {
     .filter((item) => item.title || item.text);
 };
 
-/* ==============================
-   DEFAULT POLICY
-============================== */
 const defaultPayload = {
   slug: "main",
   version: new Date().toISOString().slice(0, 10),
   title: "Saint Clothing Policies",
   description:
     "Store rules, terms, privacy, shipping, returns, and payment policies.",
+  isDeleted: false,
+  deletedAt: null,
+  deletedBy: "",
   policies: [
     {
       key: PRIVACY_KEY,
@@ -53,12 +50,33 @@ const defaultPayload = {
       sortOrder: 2,
       isActive: true,
     },
+    {
+      key: "shipping-policy",
+      title: "Shipping Policy",
+      content: [],
+      requiredOnRegister: false,
+      sortOrder: 3,
+      isActive: true,
+    },
+    {
+      key: "return-refund-policy",
+      title: "Return and Refund Policy",
+      content: [],
+      requiredOnRegister: false,
+      sortOrder: 4,
+      isActive: true,
+    },
+    {
+      key: "payment-policy",
+      title: "Payment Policy",
+      content: [],
+      requiredOnRegister: false,
+      sortOrder: 5,
+      isActive: true,
+    },
   ],
 };
 
-/* ==============================
-   ENSURE MAIN POLICY EXISTS
-============================== */
 const ensureMainPolicy = async () => {
   let doc = await policyModel.findOne({ slug: "main" });
 
@@ -69,12 +87,24 @@ const ensureMainPolicy = async () => {
   return doc;
 };
 
-/* ==============================
-   GET ALL POLICIES
-============================== */
 export const getPolicies = async (req, res) => {
   try {
     const doc = await ensureMainPolicy();
+
+    if (doc.isDeleted) {
+      return res.json({
+        success: true,
+        policySet: {
+          _id: doc._id,
+          slug: doc.slug,
+          version: doc.version,
+          title: doc.title,
+          description: doc.description,
+          policies: [],
+          updatedAt: doc.updatedAt,
+        },
+      });
+    }
 
     const sortedPolicies = [...(doc.policies || [])]
       .filter((item) => item.isActive !== false)
@@ -105,12 +135,16 @@ export const getPolicies = async (req, res) => {
   }
 };
 
-/* ==============================
-   GET TERMS
-============================== */
 export const getTermsPolicy = async (req, res) => {
   try {
     const doc = await ensureMainPolicy();
+
+    if (doc.isDeleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Terms policy is currently unavailable",
+      });
+    }
 
     const terms = (doc.policies || []).find(
       (item) => item.key === TERMS_KEY && item.isActive !== false
@@ -133,12 +167,16 @@ export const getTermsPolicy = async (req, res) => {
   }
 };
 
-/* ==============================
-   GET PRIVACY
-============================== */
 export const getPrivacyPolicy = async (req, res) => {
   try {
     const doc = await ensureMainPolicy();
+
+    if (doc.isDeleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Privacy policy is currently unavailable",
+      });
+    }
 
     const privacy = (doc.policies || []).find(
       (item) => item.key === PRIVACY_KEY && item.isActive !== false
@@ -160,18 +198,19 @@ export const getPrivacyPolicy = async (req, res) => {
   }
 };
 
-/* ==============================
-   UPDATE POLICIES (WITH HISTORY)
-============================== */
 export const updatePolicies = async (req, res) => {
   try {
     const { title, description, version, policies } = req.body;
 
     const doc = await ensureMainPolicy();
 
-    /* ==============================
-       UPDATE MAIN INFO
-    ============================== */
+    if (doc.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot update policies while they are in trash",
+      });
+    }
+
     if (typeof title === "string") {
       doc.title = title.trim() || doc.title;
     }
@@ -184,9 +223,6 @@ export const updatePolicies = async (req, res) => {
       doc.version = version.trim();
     }
 
-    /* ==============================
-       UPDATE POLICIES LIST
-    ============================== */
     if (Array.isArray(policies)) {
       doc.policies = policies.map((item, index) => {
         const key = String(item.key || `policy-${index + 1}`)
@@ -205,15 +241,14 @@ export const updatePolicies = async (req, res) => {
       });
     }
 
+    doc.updatedBy = getActorName(req, "Admin");
+
     await doc.save();
 
-    /* ==============================
-       🔥 ACTIVITY LOG (FIXED)
-    ============================== */
     await addLog({
       action: "POLICIES_UPDATED",
       message: `Policies updated (Version: ${doc.version})`,
-      user: getActorName(req),
+      user: getActorName(req, "Admin"),
       entityId: doc._id,
       entityType: "Policy",
     });
@@ -225,6 +260,156 @@ export const updatePolicies = async (req, res) => {
     });
   } catch (err) {
     console.log("UPDATE POLICIES ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const deletePolicySet = async (req, res) => {
+  try {
+    const doc = await ensureMainPolicy();
+
+    if (doc.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Policy set is already in trash",
+      });
+    }
+
+    doc.isDeleted = true;
+    doc.deletedAt = new Date();
+    doc.deletedBy = getActorName(req, "Admin");
+
+    await doc.save();
+
+    await addLog({
+      action: "POLICY_DELETED",
+      message: `Policy set moved to trash: ${doc.title}`,
+      user: getActorName(req, "Admin"),
+      entityId: doc._id,
+      entityType: "Policy",
+    });
+
+    return res.json({
+      success: true,
+      message: "Policy set moved to trash",
+      policySet: doc,
+    });
+  } catch (err) {
+    console.log("DELETE POLICY ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const getDeletedPolicies = async (req, res) => {
+  try {
+    const policies = await policyModel
+      .find({ isDeleted: true })
+      .sort({ deletedAt: -1 });
+
+    return res.json({
+      success: true,
+      count: policies.length,
+      policies,
+    });
+  } catch (err) {
+    console.log("GET DELETED POLICIES ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const restorePolicySet = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    const doc = await policyModel.findById(id);
+
+    if (!doc) {
+      return res.status(404).json({
+        success: false,
+        message: "Policy set not found",
+      });
+    }
+
+    if (!doc.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Policy set is not in trash",
+      });
+    }
+
+    doc.isDeleted = false;
+    doc.deletedAt = null;
+    doc.deletedBy = "";
+
+    await doc.save();
+
+    await addLog({
+      action: "POLICY_RESTORED",
+      message: `Policy set restored from trash: ${doc.title}`,
+      user: getActorName(req, "Admin"),
+      entityId: doc._id,
+      entityType: "Policy",
+    });
+
+    return res.json({
+      success: true,
+      message: "Policy set restored",
+      policySet: doc,
+    });
+  } catch (err) {
+    console.log("RESTORE POLICY ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const permanentDeletePolicySet = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    const doc = await policyModel.findById(id);
+
+    if (!doc) {
+      return res.status(404).json({
+        success: false,
+        message: "Policy set not found",
+      });
+    }
+
+    if (!doc.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Policy set must be in trash before permanent delete",
+      });
+    }
+
+    await policyModel.findByIdAndDelete(id);
+
+    await addLog({
+      action: "POLICY_PERMANENTLY_DELETED",
+      message: `Policy set permanently deleted: ${doc.title}`,
+      user: getActorName(req, "Admin"),
+      entityId: doc._id,
+      entityType: "Policy",
+    });
+
+    return res.json({
+      success: true,
+      message: "Policy set permanently deleted",
+    });
+  } catch (err) {
+    console.log("PERMANENT DELETE POLICY ERROR:", err);
     return res.status(500).json({
       success: false,
       message: err.message,

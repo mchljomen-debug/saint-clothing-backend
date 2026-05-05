@@ -8,22 +8,41 @@ const categorySchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
+
     image: {
       type: String,
       default: "",
     },
+
     section: {
       type: String,
       enum: ["top", "bottom", "both", "other"],
       default: "other",
     },
+
     matchWith: {
       type: [String],
       default: [],
     },
+
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+
+    deletedBy: {
+      type: String,
+      default: "",
     },
   },
   { timestamps: true }

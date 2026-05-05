@@ -1,7 +1,6 @@
 import branchModel from "../models/branchModel.js";
 import { addLog, getActorName } from "../utils/activityLogger.js";
 
-// GET ALL BRANCHES
 export const getAllBranches = async (req, res) => {
   try {
     const branches = await branchModel.find().sort({ createdAt: -1 });
@@ -19,7 +18,6 @@ export const getAllBranches = async (req, res) => {
   }
 };
 
-// CREATE BRANCH
 export const createBranch = async (req, res) => {
   try {
     const { name, code, address, contactNumber, managerName } = req.body;
@@ -34,9 +32,7 @@ export const createBranch = async (req, res) => {
       });
     }
 
-    const existingBranch = await branchModel.findOne({
-      code: normalizedCode,
-    });
+    const existingBranch = await branchModel.findOne({ code: normalizedCode });
 
     if (existingBranch) {
       return res.status(400).json({
@@ -76,7 +72,6 @@ export const createBranch = async (req, res) => {
   }
 };
 
-// UPDATE BRANCH
 export const updateBranch = async (req, res) => {
   try {
     const { id } = req.params;
@@ -113,17 +108,11 @@ export const updateBranch = async (req, res) => {
       existingBranch.name = cleanName;
     }
 
-    if (address !== undefined) {
-      existingBranch.address = String(address).trim();
-    }
-
-    if (contactNumber !== undefined) {
+    if (address !== undefined) existingBranch.address = String(address).trim();
+    if (contactNumber !== undefined)
       existingBranch.contactNumber = String(contactNumber).trim();
-    }
-
-    if (managerName !== undefined) {
+    if (managerName !== undefined)
       existingBranch.managerName = String(managerName).trim();
-    }
 
     if (isActive !== undefined) {
       existingBranch.isActive =
@@ -174,6 +163,42 @@ export const updateBranch = async (req, res) => {
     });
   } catch (error) {
     console.log("updateBranch error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+export const deleteBranch = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const branch = await branchModel.findById(id);
+
+    if (!branch) {
+      return res.status(404).json({
+        success: false,
+        message: "Branch not found",
+      });
+    }
+
+    await branchModel.findByIdAndDelete(id);
+
+    await addLog({
+      action: "BRANCH_DELETED",
+      message: `Branch deleted: ${branch.name} (${branch.code})`,
+      user: getActorName(req, "Admin"),
+      entityId: branch._id,
+      entityType: "Branch",
+    });
+
+    return res.json({
+      success: true,
+      message: "Branch deleted successfully",
+    });
+  } catch (error) {
+    console.log("deleteBranch error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",

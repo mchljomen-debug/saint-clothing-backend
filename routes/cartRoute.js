@@ -1,17 +1,34 @@
 import express from "express";
+import adminAuth from "../middleware/adminAuth.js";
+import upload from "../middleware/multer.js";
 import {
-  addToCart,
-  getUserCart,
-  updateCart,
-  clearCart,
-} from "../controllers/cartController.js";
-import authUser from "../middleware/auth.js";
+  listCategories,
+  addCategory,
+  updateCategory,
+  deleteCategory,
+  getDeletedCategories,
+  restoreCategory,
+  permanentDeleteCategory,
+} from "../controllers/categoryController.js";
 
-const cartRouter = express.Router();
+const categoryRouter = express.Router();
 
-cartRouter.post("/get", authUser, getUserCart);
-cartRouter.post("/add", authUser, addToCart);
-cartRouter.post("/update", authUser, updateCart);
-cartRouter.post("/clear", authUser, clearCart);
+categoryRouter.get("/list", listCategories);
 
-export default cartRouter;
+categoryRouter.post("/add", adminAuth, upload.single("image"), addCategory);
+
+categoryRouter.put(
+  "/update/:id",
+  adminAuth,
+  upload.single("image"),
+  updateCategory
+);
+
+categoryRouter.post("/delete", adminAuth, deleteCategory);
+
+/* GLOBAL TRASH SUPPORT */
+categoryRouter.get("/trash", adminAuth, getDeletedCategories);
+categoryRouter.post("/restore", adminAuth, restoreCategory);
+categoryRouter.post("/permanent-delete", adminAuth, permanentDeleteCategory);
+
+export default categoryRouter;

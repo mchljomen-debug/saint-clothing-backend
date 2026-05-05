@@ -69,6 +69,7 @@ const sanitizeAdminUser = (user) => ({
   blockedAt: user.blockedAt || null,
   deactivatedAt: user.deactivatedAt || null,
   deletedAt: user.deletedAt || null,
+  deletedBy: user.deletedBy || "",
   lastLoginAt: user.lastLoginAt || null,
   lastSeenAt: user.lastSeenAt || null,
   createdAt: user.createdAt || null,
@@ -81,12 +82,18 @@ const buildDashboardData = async (user) => {
 
   let products = await productModel.find({}).sort({ createdAt: -1 });
   let orders = await orderModel.find({}).sort({ date: -1, createdAt: -1 });
+
   let users = isAdmin
     ? await userModel.find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 })
     : [];
+
   const employees = isAdmin
-    ? await employeeModel.find({}).sort({ createdAt: -1 })
-    : await employeeModel.find({ branch: branchCode }).sort({ createdAt: -1 });
+    ? await employeeModel
+        .find({ isDeleted: { $ne: true } })
+        .sort({ createdAt: -1 })
+    : await employeeModel
+        .find({ branch: branchCode, isDeleted: { $ne: true } })
+        .sort({ createdAt: -1 });
 
   if (!isAdmin) {
     products = products.filter((p) => (p.branch || "") === branchCode);
@@ -101,6 +108,7 @@ const buildDashboardData = async (user) => {
     (sum, order) => sum + toNumber(order.amount),
     0
   );
+
   const totalOrders = orders.length;
   const totalProducts = products.length;
   const totalUsers = isAdmin ? users.length : 0;
@@ -122,14 +130,17 @@ const buildDashboardData = async (user) => {
 
   const categoryMap = {};
   const subCategoryMap = {};
+
   products.forEach((product) => {
     const category = product.category || "Uncategorized";
     const subCategory = product.subCategory || "Uncategorized";
+
     categoryMap[category] = (categoryMap[category] || 0) + 1;
     subCategoryMap[subCategory] = (subCategoryMap[subCategory] || 0) + 1;
   });
 
   const productSalesMap = {};
+
   orders.forEach((order) => {
     (order.items || []).forEach((item) => {
       if (!isAdmin && (item.branch || "") !== branchCode) return;
@@ -188,6 +199,7 @@ const buildDashboardData = async (user) => {
       (sum, order) => sum + toNumber(order.amount),
       0
     );
+
     const profit = Math.floor(revenue * 0.3);
 
     monthlyLabels.push(MONTH_NAMES[month]);
@@ -322,6 +334,7 @@ export const adminLogin = async (req, res) => {
     const employee = await employeeModel.findOne({
       email: cleanEmail,
       isActive: true,
+      isDeleted: { $ne: true },
     });
 
     if (!employee) {
@@ -478,7 +491,9 @@ export const exportDashboardExcel = async (req, res) => {
     const recentOrdersSheet = XLSX.utils.json_to_sheet(
       dashboardData.recentOrders.map((order) => ({
         Order_ID: String(order._id),
-        Customer: `${order.address?.firstName || ""} ${order.address?.lastName || ""}`.trim(),
+        Customer: `${order.address?.firstName || ""} ${
+          order.address?.lastName || ""
+        }`.trim(),
         Amount: toNumber(order.amount),
         Status: order.status || "Pending",
         Payment_Method: order.paymentMethod || "COD",
@@ -517,6 +532,7 @@ export const exportDashboardExcel = async (req, res) => {
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
+
     res.setHeader(
       "Content-Disposition",
       `attachment; filename=dashboard-${
@@ -570,6 +586,7 @@ export const blockUser = async (req, res) => {
 
     user.isBlocked = true;
     user.blockedAt = new Date();
+
     await user.save();
 
     await addLog({
@@ -608,6 +625,7 @@ export const unblockUser = async (req, res) => {
 
     user.isBlocked = false;
     user.blockedAt = null;
+
     await user.save();
 
     await addLog({
@@ -646,6 +664,7 @@ export const deactivateUser = async (req, res) => {
 
     user.isActive = false;
     user.deactivatedAt = new Date();
+
     await user.save();
 
     await addLog({
@@ -684,6 +703,7 @@ export const reactivateUser = async (req, res) => {
 
     user.isActive = true;
     user.deactivatedAt = null;
+
     await user.save();
 
     await addLog({
@@ -720,8 +740,16 @@ export const softDeleteUser = async (req, res) => {
       });
     }
 
+    if (user.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "User already in trash",
+      });
+    }
+
     user.isDeleted = true;
     user.deletedAt = new Date();
+    user.deletedBy = getActorName(req, "Admin");
     user.isActive = false;
     user.deactivatedAt = new Date();
     user.isBlocked = true;
@@ -731,7 +759,7 @@ export const softDeleteUser = async (req, res) => {
 
     await addLog({
       action: "USER_DELETED",
-      message: `User deleted: ${user.name || user.email}`,
+      message: `User moved to trash: ${user.name || user.email}`,
       user: getActorName(req, "Admin"),
       entityId: user._id,
       entityType: "User",
@@ -739,7 +767,7 @@ export const softDeleteUser = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "User deleted successfully",
+      message: "User moved to trash successfully",
     });
   } catch (err) {
     console.log("softDeleteUser error:", err);
@@ -752,7 +780,9 @@ export const softDeleteUser = async (req, res) => {
 
 export const getAllEmployees = async (req, res) => {
   try {
-    const employees = await employeeModel.find().sort({ createdAt: -1 });
+    const employees = await employeeModel
+      .find({ isDeleted: { $ne: true } })
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -789,12 +819,26 @@ export const createEmployee = async (req, res) => {
 
     const existing = await employeeModel.findOne({
       email: normalizedEmail,
+      isDeleted: { $ne: true },
     });
 
     if (existing) {
       return res.status(400).json({
         success: false,
         message: "Employee email already exists",
+      });
+    }
+
+    const deletedExisting = await employeeModel.findOne({
+      email: normalizedEmail,
+      isDeleted: true,
+    });
+
+    if (deletedExisting) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Employee email exists in trash. Restore or permanently delete it first.",
       });
     }
 
@@ -814,6 +858,9 @@ export const createEmployee = async (req, res) => {
       resume: resumeFile,
       picture: pictureFile,
       isActive: true,
+      isDeleted: false,
+      deletedAt: null,
+      deletedBy: "",
     });
 
     await newEmployee.save();
@@ -853,7 +900,10 @@ export const updateEmployee = async (req, res) => {
     const { id } = req.params;
     const { name, email, password, role, branch, isActive } = req.body;
 
-    const employee = await employeeModel.findById(id);
+    const employee = await employeeModel.findOne({
+      _id: id,
+      isDeleted: { $ne: true },
+    });
 
     if (!employee) {
       return res.status(404).json({
@@ -872,6 +922,7 @@ export const updateEmployee = async (req, res) => {
       const existing = await employeeModel.findOne({
         email: normalizedEmail,
         _id: { $ne: id },
+        isDeleted: { $ne: true },
       });
 
       if (existing) {
@@ -880,13 +931,29 @@ export const updateEmployee = async (req, res) => {
           message: "Employee email already exists",
         });
       }
+
+      const deletedExisting = await employeeModel.findOne({
+        email: normalizedEmail,
+        isDeleted: true,
+      });
+
+      if (deletedExisting) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Employee email exists in trash. Restore or permanently delete it first.",
+        });
+      }
     }
 
     const newRole = role || employee.role;
     const newBranch = newRole === "admin" ? "all" : branch || employee.branch;
     const newManagerFlag = newRole === "manager";
 
-    if ((oldRole === "manager" || employee.isBranchManager) && oldBranch !== "all") {
+    if (
+      (oldRole === "manager" || employee.isBranchManager) &&
+      oldBranch !== "all"
+    ) {
       await branchModel.findOneAndUpdate(
         { code: oldBranch, managerName: oldName },
         { managerName: "" },
@@ -959,6 +1026,13 @@ export const deleteEmployee = async (req, res) => {
       });
     }
 
+    if (employee.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee already in trash",
+      });
+    }
+
     if (
       (employee.role === "manager" || employee.isBranchManager) &&
       employee.branch &&
@@ -966,16 +1040,20 @@ export const deleteEmployee = async (req, res) => {
     ) {
       await branchModel.findOneAndUpdate(
         { code: employee.branch, managerName: employee.name },
-        { managerName: "" },
-        { new: true }
+        { managerName: "" }
       );
     }
 
-    await employeeModel.findByIdAndDelete(id);
+    employee.isDeleted = true;
+    employee.deletedAt = new Date();
+    employee.deletedBy = getActorName(req, "Admin");
+    employee.isActive = false;
+
+    await employee.save();
 
     await addLog({
       action: "EMPLOYEE_DELETED",
-      message: `Employee removed: ${employee.name} (${employee.role})`,
+      message: `Employee moved to trash: ${employee.name}`,
       user: getActorName(req, "Admin"),
       entityId: employee._id,
       entityType: "Employee",
@@ -983,7 +1061,7 @@ export const deleteEmployee = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Employee removed successfully",
+      message: "Employee moved to trash",
     });
   } catch (err) {
     console.log("deleteEmployee error:", err);

@@ -2,7 +2,7 @@ import express from "express";
 import adminAuth from "../middleware/adminAuth.js";
 import upload from "../middleware/multer.js";
 import {
-  listCategories,
+  listCategories, 
   addCategory,
   updateCategory,
   deleteCategory,
