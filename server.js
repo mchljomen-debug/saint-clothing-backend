@@ -20,6 +20,7 @@ import trashRouter from "./routes/trashRoute.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import aiRouter from "./routes/aiRoute.js";
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -133,6 +134,7 @@ app.use("/api/recommendation", recommendationRouter);
 app.use("/api/policy", policyRouter);
 app.use("/api/category", categoryRouter);
 app.use("/api/trash", trashRouter);
+app.use("/api/ai", aiRouter);
 /* ===============================
    404 HANDLER
 ================================ */
