@@ -5,9 +5,6 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-/* ==============================
-   TEXT STYLE SUGGESTION
-============================== */
 export const generateOutfitSuggestion = async (req, res) => {
   try {
     const { top, bottom, style } = req.body;
@@ -22,7 +19,7 @@ Bottom:
 ${JSON.stringify(bottom, null, 2)}
 
 Style:
-${style}
+${style || "modern streetwear"}
 
 Explain why this outfit works in a modern streetwear fashion style.
 Keep response short and clean.
@@ -33,26 +30,37 @@ Keep response short and clean.
       contents: prompt,
     });
 
-    res.json({
+    return res.json({
       success: true,
-      suggestion: response.text,
+      suggestion: response.text || "",
     });
   } catch (error) {
     console.error("Gemini Text Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "AI style analysis failed",
+      message: error.message || "AI style analysis failed",
     });
   }
 };
 
-/* ==============================
-   AI GENERATED OUTFIT IMAGE
-============================== */
 export const generateOutfitImage = async (req, res) => {
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "GEMINI_API_KEY is missing in backend environment variables.",
+      });
+    }
+
     const { top, bottom, mannequin, style } = req.body;
+
+    if (!mannequin?.data) {
+      return res.status(400).json({
+        success: false,
+        message: "Mannequin image is missing.",
+      });
+    }
 
     if (!top?.image?.data && !bottom?.image?.data) {
       return res.status(400).json({
@@ -61,40 +69,37 @@ export const generateOutfitImage = async (req, res) => {
       });
     }
 
-    const parts = [];
-
-    parts.push({
-      text: `
-Create a clean fashion e-commerce outfit preview.
+    const parts = [
+      {
+        text: `
+Create a realistic product catalog image.
 
 Goal:
-Make the mannequin look like it is naturally wearing the selected clothing.
+Make the mannequin naturally wear the selected clothing.
 
 Style:
-${style || "modern streetwear"}
+${style || "modern Saint Clothing streetwear"}
 
-Instructions:
-- Use the mannequin body as the base pose.
-- Place the top clothing naturally on the upper body.
-- Place the bottom clothing naturally on the lower body.
-- Keep the clothing design, color, logo, and texture close to the reference product images.
-- Keep a clean studio background.
-- Full body mannequin view.
-- No extra text.
+Important:
+- Use the mannequin as the base body and pose.
+- Make the shirt/top look naturally worn on the mannequin.
+- Make the shorts/bottom look naturally worn on the mannequin.
+- Preserve the clothing color, print, graphics, logo, and texture from the product images.
+- Full body mannequin.
+- Black studio background.
+- Centered product catalog photo.
+- No text.
 - No watermark.
-- No distorted body.
-- No duplicate clothes.
+- No extra objects.
 `,
-    });
-
-    if (mannequin?.data) {
-      parts.push({
+      },
+      {
         inlineData: {
           mimeType: mannequin.mimeType || "image/png",
           data: mannequin.data,
         },
-      });
-    }
+      },
+    ];
 
     if (top?.image?.data) {
       parts.push({
@@ -115,36 +120,50 @@ Instructions:
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-image-preview",
-      contents: parts,
+      model: "gemini-2.5-flash-image-preview",
+      contents: [
+        {
+          role: "user",
+          parts,
+        },
+      ],
     });
 
     let image = "";
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
+    const responseParts = response?.candidates?.[0]?.content?.parts || [];
+
+    for (const part of responseParts) {
       if (part.inlineData?.data) {
-        image = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        image = `data:${part.inlineData.mimeType || "image/png"};base64,${
+          part.inlineData.data
+        }`;
         break;
       }
     }
 
     if (!image) {
+      console.error("Gemini Image Response Without Image:", JSON.stringify(response, null, 2));
+
       return res.status(500).json({
         success: false,
-        message: "AI did not return an image.",
+        message: "Gemini did not return an image.",
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       image,
     });
   } catch (error) {
     console.error("Gemini Image Error:", error);
+    console.error("Gemini Image Error Message:", error.message);
+    console.error("Gemini Image Error Response:", error.response?.data);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "AI image generation failed",
+      message: error.message || "AI image generation failed",
+      details: error.response?.data || null,
     });
   }
 };
