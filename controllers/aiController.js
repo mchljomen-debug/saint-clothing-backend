@@ -1,10 +1,13 @@
 import "dotenv/config";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
+/* ==============================
+   TEXT STYLE SUGGESTION
+============================== */
 export const generateOutfitSuggestion = async (req, res) => {
   try {
     const { top, bottom, style } = req.body;
@@ -44,12 +47,15 @@ Keep response short and clean.
   }
 };
 
+/* ==============================
+   AI GENERATED OUTFIT IMAGE
+============================== */
 export const generateOutfitImage = async (req, res) => {
   try {
     if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({
         success: false,
-        message: "GEMINI_API_KEY is missing in backend environment variables.",
+        message: "GEMINI_API_KEY is missing in Render environment variables.",
       });
     }
 
@@ -72,25 +78,26 @@ export const generateOutfitImage = async (req, res) => {
     const parts = [
       {
         text: `
-Create a realistic product catalog image.
+Create a realistic full-body fashion e-commerce catalog image.
 
-Goal:
-Make the mannequin naturally wear the selected clothing.
+Main goal:
+Make the mannequin naturally wear the selected outfit.
 
-Style:
+Style direction:
 ${style || "modern Saint Clothing streetwear"}
 
-Important:
-- Use the mannequin as the base body and pose.
-- Make the shirt/top look naturally worn on the mannequin.
-- Make the shorts/bottom look naturally worn on the mannequin.
-- Preserve the clothing color, print, graphics, logo, and texture from the product images.
-- Full body mannequin.
-- Black studio background.
-- Centered product catalog photo.
+Rules:
+- Use the mannequin image as the base body and pose.
+- Make the selected top look naturally worn on the mannequin.
+- Make the selected bottom look naturally worn on the mannequin.
+- Preserve the product colors, graphics, logos, texture, and silhouette.
+- Centered full-body product catalog photo.
+- Clean black studio background.
+- No extra models.
+- No extra clothes.
+- No floating clothes.
 - No text.
 - No watermark.
-- No extra objects.
 `,
       },
       {
@@ -120,18 +127,27 @@ Important:
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-image-preview",
+      model: "gemini-2.0-flash-preview-image-generation",
       contents: [
         {
           role: "user",
           parts,
         },
       ],
+      config: {
+        responseModalities: [Modality.TEXT, Modality.IMAGE],
+      },
     });
 
-    let image = "";
+    const candidates =
+      response?.candidates ||
+      response?.response?.candidates ||
+      [];
 
-    const responseParts = response?.candidates?.[0]?.content?.parts || [];
+    const responseParts =
+      candidates?.[0]?.content?.parts || [];
+
+    let image = "";
 
     for (const part of responseParts) {
       if (part.inlineData?.data) {
@@ -143,11 +159,15 @@ Important:
     }
 
     if (!image) {
-      console.error("Gemini Image Response Without Image:", JSON.stringify(response, null, 2));
+      console.error(
+        "Gemini Image Response Without Image:",
+        JSON.stringify(response, null, 2)
+      );
 
       return res.status(500).json({
         success: false,
-        message: "Gemini did not return an image.",
+        message:
+          "Gemini did not return an image. Check if image generation is enabled for your API key.",
       });
     }
 
