@@ -64,14 +64,14 @@ const normalizeAddress = (address = {}) => ({
   country: address?.country || "Philippines",
   latitude:
     address?.latitude !== undefined &&
-    address?.latitude !== null &&
-    address?.latitude !== ""
+      address?.latitude !== null &&
+      address?.latitude !== ""
       ? Number(address.latitude)
       : null,
   longitude:
     address?.longitude !== undefined &&
-    address?.longitude !== null &&
-    address?.longitude !== ""
+      address?.longitude !== null &&
+      address?.longitude !== ""
       ? Number(address.longitude)
       : null,
   psgcRegionCode: address?.psgcRegionCode || "",
@@ -91,9 +91,8 @@ const getProductImage = (product, item) => {
 };
 
 const getCustomerNameFromOrder = (order) =>
-  `${order?.address?.firstName || ""} ${
-    order?.address?.lastName || ""
-  }`.trim() || "Customer";
+  `${order?.address?.firstName || ""} ${order?.address?.lastName || ""
+    }`.trim() || "Customer";
 
 const getCustomerNameFromAddress = (address) =>
   `${address?.firstName || ""} ${address?.lastName || ""}`.trim() ||
@@ -277,9 +276,8 @@ const deductOrderStock = async (items) => {
       action: preorderMode
         ? "ORDER_PREORDER_STOCK_DEDUCTED"
         : "ORDER_STOCK_DEDUCTED",
-      message: `${
-        preorderMode ? "Pre-order stock" : "Stock"
-      } deducted for order item: ${product.name} (${sizeKey}) -${quantity}`,
+      message: `${preorderMode ? "Pre-order stock" : "Stock"
+        } deducted for order item: ${product.name} (${sizeKey}) -${quantity}`,
       user: "System",
       entityId: product._id,
       entityType: "Product",
@@ -314,9 +312,8 @@ const restoreOrderStock = async (items) => {
       action: item.isPreorder
         ? "ORDER_PREORDER_STOCK_RESTORED"
         : "ORDER_STOCK_RESTORED",
-      message: `${
-        item.isPreorder ? "Pre-order stock" : "Stock"
-      } restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
+      message: `${item.isPreorder ? "Pre-order stock" : "Stock"
+        } restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
       user: "System",
       entityId: product._id,
       entityType: "Product",
@@ -371,19 +368,19 @@ const placeOrder = async (req, res) => {
 
     const finalDeliveryEstimate = hasPreorderItems
       ? {
-          minDays: Number(deliveryEstimate?.minDays || 5),
-          maxDays: Number(deliveryEstimate?.maxDays || 7),
-          label: "Pre-order delivery",
-          range: deliveryEstimate?.range || "",
-          shipsOn: preorderShipDate,
-        }
+        minDays: Number(deliveryEstimate?.minDays || 5),
+        maxDays: Number(deliveryEstimate?.maxDays || 7),
+        label: "Pre-order delivery",
+        range: deliveryEstimate?.range || "",
+        shipsOn: preorderShipDate,
+      }
       : {
-          minDays: Number(deliveryEstimate?.minDays || 0),
-          maxDays: Number(deliveryEstimate?.maxDays || 0),
-          label: deliveryEstimate?.label || "",
-          range: deliveryEstimate?.range || "",
-          shipsOn: null,
-        };
+        minDays: Number(deliveryEstimate?.minDays || 0),
+        maxDays: Number(deliveryEstimate?.maxDays || 0),
+        label: deliveryEstimate?.label || "",
+        range: deliveryEstimate?.range || "",
+        shipsOn: null,
+      };
 
     const newOrder = new orderModel({
       userId,
@@ -1078,10 +1075,12 @@ const receiveOrder = async (req, res) => {
       .trim()
       .toLowerCase();
 
-    if (currentStatus !== "Out for Delivery") {
+    const currentStatus = normalizeStatus(order.status);
+
+    if (!["Out for Delivery", "Delivered"].includes(currentStatus)) {
       return res.status(400).json({
         success: false,
-        message: "Only orders out for delivery can be marked as received",
+        message: "Only delivered orders can submit delivery proof",
       });
     }
 
