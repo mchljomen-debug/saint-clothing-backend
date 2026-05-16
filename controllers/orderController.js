@@ -618,6 +618,7 @@ const paymongoWebhook = async (req, res) => {
     const eventData = event?.attributes?.data;
 
     console.log("PAYMONGO WEBHOOK EVENT:", eventType);
+    console.log("PAYMONGO WEBHOOK DATA:", JSON.stringify(eventData, null, 2));
 
     const checkoutSessionId =
       eventData?.attributes?.checkout_session_id ||
@@ -628,6 +629,11 @@ const paymongoWebhook = async (req, res) => {
     const paymentIntentId =
       eventData?.attributes?.payment_intent_id ||
       eventData?.attributes?.payment_intent ||
+      "";
+
+    const metadataOrderId =
+      eventData?.attributes?.metadata?.orderId ||
+      eventData?.attributes?.data?.attributes?.metadata?.orderId ||
       "";
 
     let order = null;
@@ -644,8 +650,12 @@ const paymongoWebhook = async (req, res) => {
       });
     }
 
+    if (!order && metadataOrderId) {
+      order = await orderModel.findById(metadataOrderId);
+    }
+
     if (!order) {
-      console.log("PAYMONGO WEBHOOK: Order not found for event");
+      console.log("PAYMONGO WEBHOOK: Order not found");
       return res.json({ success: true });
     }
 
