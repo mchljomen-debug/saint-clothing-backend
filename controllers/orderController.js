@@ -633,21 +633,17 @@ const paymongoWebhook = async (req, res) => {
 
     const metadataOrderId =
       eventData?.attributes?.metadata?.orderId ||
-      eventData?.attributes?.data?.attributes?.metadata?.orderId ||
+      eventData?.attributes?.metadata?.order_id ||
       "";
 
     let order = null;
 
     if (checkoutSessionId) {
-      order = await orderModel.findOne({
-        paymongoCheckoutId: checkoutSessionId,
-      });
+      order = await orderModel.findOne({ paymongoCheckoutId: checkoutSessionId });
     }
 
     if (!order && paymentIntentId) {
-      order = await orderModel.findOne({
-        paymongoPaymentIntentId: paymentIntentId,
-      });
+      order = await orderModel.findOne({ paymongoPaymentIntentId: paymentIntentId });
     }
 
     if (!order && metadataOrderId) {
@@ -668,16 +664,6 @@ const paymongoWebhook = async (req, res) => {
       }
     }
 
-    if (
-      eventType === "checkout_session.payment.failed" ||
-      eventType === "payment.failed"
-    ) {
-      order.payment = false;
-      order.paymentStatus = "failed";
-      order.status = "Payment Failed";
-      await order.save();
-    }
-
     return res.json({ success: true });
   } catch (error) {
     console.error("PAYMONGO WEBHOOK ERROR:", error);
@@ -687,7 +673,6 @@ const paymongoWebhook = async (req, res) => {
     });
   }
 };
-
 const updateTrackingNumber = async (req, res) => {
   try {
     const { orderId, jntTrackingNumber } = req.body;
