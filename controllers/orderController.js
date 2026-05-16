@@ -1011,9 +1011,12 @@ const updateStatus = async (req, res) => {
 
 const receiveOrder = async (req, res) => {
   try {
-    const { orderId, userId } = req.body;
+    const { orderId, userId, deliveryProofNote } = req.body;
 
-    const order = await orderModel.findOne({ _id: orderId, userId });
+    const order = await orderModel.findOne({
+      _id: orderId,
+      userId,
+    });
 
     if (!order) {
       return res.status(404).json({
@@ -1023,15 +1026,20 @@ const receiveOrder = async (req, res) => {
     }
 
     const currentStatus = normalizeStatus(order.status);
+
     const method = normalizePaymentMethod(order.paymentMethod);
-    const currentPaymentStatus = String(order.paymentStatus || "")
+
+    const currentPaymentStatus = String(
+      order.paymentStatus || ""
+    )
       .trim()
       .toLowerCase();
 
     if (currentStatus !== "Out for Delivery") {
       return res.status(400).json({
         success: false,
-        message: "Only orders out for delivery can be marked as received",
+        message:
+          "Only orders out for delivery can be marked as received",
       });
     }
 
@@ -1042,10 +1050,41 @@ const receiveOrder = async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Cannot mark as received. Payment is not paid yet.",
+        message:
+          "Cannot mark as received. Payment is not paid yet.",
       });
     }
 
+    // ==============================
+    // DELIVERY PROOF REQUIRED
+    // ==============================
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: "Delivery proof photo is required",
+      });
+    }
+
+    const uploadedProof = await uploadBufferToCloudinary(
+      req.file.buffer,
+      "saint-clothing/delivery-proofs"
+    );
+
+    // ==============================
+    // SAVE DELIVERY PROOF
+    // ==============================
+    order.deliveryProofImage =
+      uploadedProof.secure_url;
+
+    order.deliveryProofNote =
+      deliveryProofNote || "";
+
+    order.deliveryProofSubmittedAt =
+      new Date();
+
+    // ==============================
+    // FINALIZE DELIVERY
+    // ==============================
     order.status = "Delivered";
 
     if (method === "COD") {
@@ -1055,11 +1094,27 @@ const receiveOrder = async (req, res) => {
 
     await order.save();
 
+    await addLog({
+      action: "ORDER_DELIVERY_PROOF_SUBMITTED",
+      message: `Delivery proof submitted for order: ${order._id}`,
+      user: getCustomerNameFromOrder(order),
+      entityId: order._id,
+      entityType: "Order",
+    });
+
     return res.json({
       success: true,
-      message: "Order marked as received",
+      message:
+        "Order marked as received with delivery proof",
+      deliveryProofImage:
+        order.deliveryProofImage,
     });
   } catch (error) {
+    console.error(
+      "RECEIVE ORDER ERROR:",
+      error
+    );
+
     return res.status(500).json({
       success: false,
       message: error.message,

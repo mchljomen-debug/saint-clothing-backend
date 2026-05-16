@@ -39,7 +39,14 @@ orderRouter.post(
 );
 
 orderRouter.post("/userorders", authUser, userOrders);
-orderRouter.post("/receive", authUser, receiveOrder);
+
+orderRouter.post(
+  "/receive",
+  authUser,
+  upload.single("deliveryProofImage"),
+  receiveOrder
+);
+
 orderRouter.post("/cancel", authUser, cancelOrder);
 
 // ==============================

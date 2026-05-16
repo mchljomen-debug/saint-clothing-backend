@@ -125,6 +125,21 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    deliveryProofImage: {
+      type: String,
+      default: "",
+    },
+
+    deliveryProofNote: {
+      type: String,
+      default: "",
+    },
+
+    deliveryProofSubmittedAt: {
+      type: Date,
+      default: null,
+    },
+
     branch: {
       type: String,
       default: "branch1",
