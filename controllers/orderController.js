@@ -406,6 +406,9 @@ const placeOrder = async (req, res) => {
       jntTrackingNumber: "",
       jntTrackingUrl: "",
       trackingUpdatedAt: null,
+      deliveryProofImage: "",
+      deliveryProofNote: "",
+      deliveryProofSubmittedAt: null,
       isPreorder: hasPreorderItems,
       deliveryEstimate: finalDeliveryEstimate,
       preorderShipDate,
@@ -806,6 +809,14 @@ const submitPaymentProof = async (req, res) => {
 
     await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
 
+    await addLog({
+      action: "ORDER_PAYMENT_PROOF_SUBMITTED",
+      message: `Payment proof submitted for order: ${order._id} via ${normalizedPaymentMethod}`,
+      user: getCustomerNameFromOrder(order),
+      entityId: order._id,
+      entityType: "Order",
+    });
+
     return res.json({
       success: true,
       message: "Payment proof submitted successfully",
@@ -864,9 +875,23 @@ const approveManualPayment = async (req, res) => {
 
     await order.save();
 
+    await addLog({
+      action: order.isPreorder
+        ? "PREORDER_MANUAL_PAYMENT_APPROVED"
+        : "ORDER_MANUAL_PAYMENT_APPROVED",
+      message: order.isPreorder
+        ? `Manual payment approved for pre-order: ${order._id}`
+        : `Manual payment approved for order: ${order._id}`,
+      user: getActorName(req, "Admin"),
+      entityId: order._id,
+      entityType: "Order",
+    });
+
     return res.json({
       success: true,
-      message: "Manual payment approved and stock deducted",
+      message: order.isPreorder
+        ? "Manual payment approved and pre-order stock deducted"
+        : "Manual payment approved and stock deducted",
     });
   } catch (error) {
     console.error("APPROVE MANUAL PAYMENT ERROR:", error);
@@ -911,6 +936,18 @@ const rejectManualPayment = async (req, res) => {
 
     await order.save();
 
+    await addLog({
+      action: order.isPreorder
+        ? "PREORDER_MANUAL_PAYMENT_REJECTED"
+        : "ORDER_MANUAL_PAYMENT_REJECTED",
+      message: order.isPreorder
+        ? `Manual payment rejected for pre-order: ${order._id}`
+        : `Manual payment rejected for order: ${order._id}`,
+      user: getActorName(req, "Admin"),
+      entityId: order._id,
+      entityType: "Order",
+    });
+
     return res.json({
       success: true,
       message: "Manual payment rejected",
@@ -938,8 +975,14 @@ const allOrders = async (req, res) => {
 
 const userOrders = async (req, res) => {
   try {
-    const { userId } = req.body;
-    const all = await orderModel.find({ userId }).sort({ createdAt: -1 });
+    const authUserId = req.userId || req.user?._id || req.user?.id;
+    const bodyUserId = req.body?.userId;
+    const finalUserId = authUserId || bodyUserId;
+
+    const all = await orderModel.find({ userId: finalUserId }).sort({
+      createdAt: -1,
+    });
+
     const orders = all.filter(shouldShowOrderInLists);
 
     return res.json({ success: true, orders: orders || [] });
@@ -997,6 +1040,14 @@ const updateStatus = async (req, res) => {
 
     await order.save();
 
+    await addLog({
+      action: "ORDER_STATUS_UPDATED",
+      message: `Order status updated: ${order._id} -> ${normalized}`,
+      user: getActorName(req, "Admin"),
+      entityId: order._id,
+      entityType: "Order",
+    });
+
     return res.json({
       success: true,
       message: "Status Updated",
@@ -1011,11 +1062,12 @@ const updateStatus = async (req, res) => {
 
 const receiveOrder = async (req, res) => {
   try {
-    const { orderId, userId, deliveryProofNote } = req.body;
+    const { orderId, deliveryProofNote } = req.body;
+    const authUserId = req.userId || req.user?._id || req.user?.id;
 
     const order = await orderModel.findOne({
       _id: orderId,
-      userId,
+      userId: authUserId,
     });
 
     if (!order) {
@@ -1026,20 +1078,15 @@ const receiveOrder = async (req, res) => {
     }
 
     const currentStatus = normalizeStatus(order.status);
-
     const method = normalizePaymentMethod(order.paymentMethod);
-
-    const currentPaymentStatus = String(
-      order.paymentStatus || ""
-    )
+    const currentPaymentStatus = String(order.paymentStatus || "")
       .trim()
       .toLowerCase();
 
     if (currentStatus !== "Out for Delivery") {
       return res.status(400).json({
         success: false,
-        message:
-          "Only orders out for delivery can be marked as received",
+        message: "Only orders out for delivery can be marked as received",
       });
     }
 
@@ -1050,14 +1097,10 @@ const receiveOrder = async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Cannot mark as received. Payment is not paid yet.",
+        message: "Cannot mark as received. Payment is not paid yet.",
       });
     }
 
-    // ==============================
-    // DELIVERY PROOF REQUIRED
-    // ==============================
     if (!req.file?.buffer) {
       return res.status(400).json({
         success: false,
@@ -1070,21 +1113,9 @@ const receiveOrder = async (req, res) => {
       "saint-clothing/delivery-proofs"
     );
 
-    // ==============================
-    // SAVE DELIVERY PROOF
-    // ==============================
-    order.deliveryProofImage =
-      uploadedProof.secure_url;
-
-    order.deliveryProofNote =
-      deliveryProofNote || "";
-
-    order.deliveryProofSubmittedAt =
-      new Date();
-
-    // ==============================
-    // FINALIZE DELIVERY
-    // ==============================
+    order.deliveryProofImage = uploadedProof.secure_url;
+    order.deliveryProofNote = deliveryProofNote || "";
+    order.deliveryProofSubmittedAt = new Date();
     order.status = "Delivered";
 
     if (method === "COD") {
@@ -1104,16 +1135,12 @@ const receiveOrder = async (req, res) => {
 
     return res.json({
       success: true,
-      message:
-        "Order marked as received with delivery proof",
-      deliveryProofImage:
-        order.deliveryProofImage,
+      message: "Order marked as received with delivery proof",
+      deliveryProofImage: order.deliveryProofImage,
+      order,
     });
   } catch (error) {
-    console.error(
-      "RECEIVE ORDER ERROR:",
-      error
-    );
+    console.error("RECEIVE ORDER ERROR:", error);
 
     return res.status(500).json({
       success: false,
@@ -1150,7 +1177,11 @@ const cancelOrder = async (req, res) => {
       });
     }
 
-    if (order.status !== "Cancelled" && order.paymentStatus !== "pending") {
+    if (
+      order.status !== "Cancelled" &&
+      order.paymentStatus !== "pending" &&
+      order.paymentStatus !== "failed"
+    ) {
       await restoreOrderStock(order.items);
     }
 
@@ -1162,6 +1193,16 @@ const cancelOrder = async (req, res) => {
     }
 
     await order.save();
+
+    await addLog({
+      action: order.isPreorder ? "PREORDER_CANCELLED" : "ORDER_CANCELLED",
+      message: order.isPreorder
+        ? `Pre-order cancelled: ${order._id}`
+        : `Order cancelled: ${order._id}`,
+      user: getCustomerNameFromOrder(order),
+      entityId: order._id,
+      entityType: "Order",
+    });
 
     return res.json({
       success: true,
