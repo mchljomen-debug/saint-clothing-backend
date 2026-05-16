@@ -105,6 +105,26 @@ const orderSchema = new mongoose.Schema(
       default: "",
     },
 
+    courier: {
+      type: String,
+      default: "J&T Express",
+    },
+
+    jntTrackingNumber: {
+      type: String,
+      default: "",
+    },
+
+    jntTrackingUrl: {
+      type: String,
+      default: "",
+    },
+
+    trackingUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+
     branch: {
       type: String,
       default: "branch1",

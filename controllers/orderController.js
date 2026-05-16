@@ -33,15 +33,13 @@ const normalizePaymentMethod = (method) => {
   return "COD";
 };
 
-const isOnlinePayment = (method) => {
-  return ["GCash", "Maya", "GoTyme", "PayMongo"].includes(
+const isOnlinePayment = (method) =>
+  ["GCash", "Maya", "GoTyme", "PayMongo"].includes(
     normalizePaymentMethod(method)
   );
-};
 
-const isManualPayment = (method) => {
-  return ["GCash", "Maya", "GoTyme"].includes(normalizePaymentMethod(method));
-};
+const isManualPayment = (method) =>
+  ["GCash", "Maya", "GoTyme"].includes(normalizePaymentMethod(method));
 
 const isAdmin = (req) => req.user?.role === "admin";
 
@@ -84,17 +82,22 @@ const normalizeAddress = (address = {}) => ({
 
 const getProductImage = (product, item) => {
   if (item?.image && String(item.image).trim()) return String(item.image).trim();
-  if (Array.isArray(product?.images) && product.images.length > 0) return product.images[0];
-  if (product?.image && String(product.image).trim()) return String(product.image).trim();
+  if (Array.isArray(product?.images) && product.images.length > 0)
+    return product.images[0];
+  if (product?.image && String(product.image).trim())
+    return String(product.image).trim();
+
   return "";
 };
 
 const getCustomerNameFromOrder = (order) =>
-  `${order?.address?.firstName || ""} ${order?.address?.lastName || ""}`.trim() ||
-  "Customer";
+  `${order?.address?.firstName || ""} ${
+    order?.address?.lastName || ""
+  }`.trim() || "Customer";
 
 const getCustomerNameFromAddress = (address) =>
-  `${address?.firstName || ""} ${address?.lastName || ""}`.trim() || "Customer";
+  `${address?.firstName || ""} ${address?.lastName || ""}`.trim() ||
+  "Customer";
 
 const getMapValue = (mapLike, key) => {
   const sizeKey = String(key || "").toUpperCase();
@@ -120,6 +123,7 @@ const setMapValue = (product, field, key, value) => {
 };
 
 const getStockValue = (product, sizeKey) => getMapValue(product?.stock, sizeKey);
+
 const getPreorderValue = (product, sizeKey) =>
   getMapValue(product?.preorderStock, sizeKey);
 
@@ -140,7 +144,8 @@ const shouldShowOrderInLists = (order) => {
   const paymentStatus = String(order?.paymentStatus || "").trim().toLowerCase();
 
   if (method === "COD") return true;
-  if (method === "PayMongo") return ["pending", "paid", "failed"].includes(paymentStatus);
+  if (method === "PayMongo")
+    return ["pending", "paid", "failed"].includes(paymentStatus);
 
   return ["verifying", "paid", "failed"].includes(paymentStatus);
 };
@@ -163,7 +168,9 @@ const validateAndNormalizeItems = async (items) => {
     if (!orderBranch) orderBranch = productBranch;
 
     if (orderBranch !== productBranch) {
-      const err = new Error("All items in one checkout must be from the same branch");
+      const err = new Error(
+        "All items in one checkout must be from the same branch"
+      );
       err.statusCode = 400;
       throw err;
     }
@@ -188,7 +195,9 @@ const validateAndNormalizeItems = async (items) => {
     }
 
     if (preorderMode && preorderStock < quantity) {
-      const err = new Error(`Pre-order stock not enough for ${product.name} (${sizeKey})`);
+      const err = new Error(
+        `Pre-order stock not enough for ${product.name} (${sizeKey})`
+      );
       err.statusCode = 400;
       throw err;
     }
@@ -237,12 +246,19 @@ const deductOrderStock = async (items) => {
       const availablePreorder = getPreorderValue(product, sizeKey);
 
       if (availablePreorder < quantity) {
-        const err = new Error(`Pre-order stock issue for ${product.name} (${sizeKey})`);
+        const err = new Error(
+          `Pre-order stock issue for ${product.name} (${sizeKey})`
+        );
         err.statusCode = 400;
         throw err;
       }
 
-      setMapValue(product, "preorderStock", sizeKey, availablePreorder - quantity);
+      setMapValue(
+        product,
+        "preorderStock",
+        sizeKey,
+        availablePreorder - quantity
+      );
     } else {
       const available = getStockValue(product, sizeKey);
 
@@ -258,10 +274,12 @@ const deductOrderStock = async (items) => {
     await product.save();
 
     await addLog({
-      action: preorderMode ? "ORDER_PREORDER_STOCK_DEDUCTED" : "ORDER_STOCK_DEDUCTED",
-      message: `${preorderMode ? "Pre-order stock" : "Stock"} deducted for order item: ${
-        product.name
-      } (${sizeKey}) -${quantity}`,
+      action: preorderMode
+        ? "ORDER_PREORDER_STOCK_DEDUCTED"
+        : "ORDER_STOCK_DEDUCTED",
+      message: `${
+        preorderMode ? "Pre-order stock" : "Stock"
+      } deducted for order item: ${product.name} (${sizeKey}) -${quantity}`,
       user: "System",
       entityId: product._id,
       entityType: "Product",
@@ -279,7 +297,12 @@ const restoreOrderStock = async (items) => {
 
     if (item.isPreorder) {
       const availablePreorder = getPreorderValue(product, sizeKey);
-      setMapValue(product, "preorderStock", sizeKey, availablePreorder + quantity);
+      setMapValue(
+        product,
+        "preorderStock",
+        sizeKey,
+        availablePreorder + quantity
+      );
     } else {
       const available = getStockValue(product, sizeKey);
       setMapValue(product, "stock", sizeKey, available + quantity);
@@ -288,10 +311,12 @@ const restoreOrderStock = async (items) => {
     await product.save();
 
     await addLog({
-      action: item.isPreorder ? "ORDER_PREORDER_STOCK_RESTORED" : "ORDER_STOCK_RESTORED",
-      message: `${item.isPreorder ? "Pre-order stock" : "Stock"} restored for order item: ${
-        product.name
-      } (${sizeKey}) +${quantity}`,
+      action: item.isPreorder
+        ? "ORDER_PREORDER_STOCK_RESTORED"
+        : "ORDER_STOCK_RESTORED",
+      message: `${
+        item.isPreorder ? "Pre-order stock" : "Stock"
+      } restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
       user: "System",
       entityId: product._id,
       entityType: "Product",
@@ -320,7 +345,9 @@ const placeOrder = async (req, res) => {
 
     const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
 
-    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(items);
+    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(
+      items
+    );
 
     const normalizedAddress = normalizeAddress(address);
     const hasPreorderItems = normalizedItems.some((item) => item.isPreorder);
@@ -375,6 +402,10 @@ const placeOrder = async (req, res) => {
       paymongoCheckoutId: "",
       paymongoPaymentIntentId: "",
       paymongoPaymentId: "",
+      courier: "J&T Express",
+      jntTrackingNumber: "",
+      jntTrackingUrl: "",
+      trackingUpdatedAt: null,
       isPreorder: hasPreorderItems,
       deliveryEstimate: finalDeliveryEstimate,
       preorderShipDate,
@@ -468,15 +499,6 @@ const createPaymongoCheckout = async (req, res) => {
       });
     }
 
-    const lineItems = [
-      {
-        currency: "PHP",
-        amount: amountInCentavos,
-        name: `Saint Clothing Order #${String(order._id).slice(-8).toUpperCase()}`,
-        quantity: 1,
-      },
-    ];
-
     const paymongoResponse = await axios.post(
       "https://api.paymongo.com/v1/checkout_sessions",
       {
@@ -486,10 +508,22 @@ const createPaymongoCheckout = async (req, res) => {
             show_description: true,
             show_line_items: true,
             description: `Saint Clothing Order ${order._id}`,
-            line_items: lineItems,
+            line_items: [
+              {
+                currency: "PHP",
+                amount: amountInCentavos,
+                name: `Saint Clothing Order #${String(order._id)
+                  .slice(-8)
+                  .toUpperCase()}`,
+                quantity: 1,
+              },
+            ],
             payment_method_types: ["gcash", "paymaya", "card"],
             success_url: `${process.env.FRONTEND_URL}/payment-submitted?orderId=${order._id}`,
             cancel_url: `${process.env.FRONTEND_URL}/orders?payment=cancelled&orderId=${order._id}`,
+            metadata: {
+              orderId: String(order._id),
+            },
           },
         },
       },
@@ -497,7 +531,9 @@ const createPaymongoCheckout = async (req, res) => {
         headers: {
           Authorization:
             "Basic " +
-            Buffer.from(`${process.env.PAYMONGO_SECRET_KEY}:`).toString("base64"),
+            Buffer.from(`${process.env.PAYMONGO_SECRET_KEY}:`).toString(
+              "base64"
+            ),
           "Content-Type": "application/json",
         },
       }
@@ -536,6 +572,7 @@ const createPaymongoCheckout = async (req, res) => {
       message:
         error.response?.data?.errors?.[0]?.detail ||
         error.response?.data?.errors?.[0]?.message ||
+        error.message ||
         "Failed to create PayMongo checkout",
     });
   }
@@ -638,6 +675,68 @@ const paymongoWebhook = async (req, res) => {
   }
 };
 
+const updateTrackingNumber = async (req, res) => {
+  try {
+    const { orderId, jntTrackingNumber } = req.body;
+
+    const order = await orderModel.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (!isAdmin(req) && order.branch !== req.user?.branch) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied for this branch order",
+      });
+    }
+
+    const cleanTracking = String(jntTrackingNumber || "").trim();
+
+    if (!cleanTracking) {
+      return res.status(400).json({
+        success: false,
+        message: "J&T tracking number is required",
+      });
+    }
+
+    order.courier = "J&T Express";
+    order.jntTrackingNumber = cleanTracking;
+    order.jntTrackingUrl = "https://www.jtexpress.ph/track-and-trace";
+    order.trackingUpdatedAt = new Date();
+
+    if (["Order Placed", "Packing"].includes(order.status)) {
+      order.status = "Shipped";
+    }
+
+    await order.save();
+
+    await addLog({
+      action: "ORDER_JNT_TRACKING_UPDATED",
+      message: `J&T tracking updated for order: ${order._id} - ${cleanTracking}`,
+      user: getActorName(req, "Admin"),
+      entityId: order._id,
+      entityType: "Order",
+    });
+
+    return res.json({
+      success: true,
+      message: "J&T tracking number updated",
+      order,
+    });
+  } catch (error) {
+    console.error("UPDATE TRACKING ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 const submitPaymentProof = async (req, res) => {
   try {
     const { orderId, referenceNumber, paymentMethod } = req.body;
@@ -707,14 +806,6 @@ const submitPaymentProof = async (req, res) => {
 
     await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
 
-    await addLog({
-      action: "ORDER_PAYMENT_PROOF_SUBMITTED",
-      message: `Payment proof submitted for order: ${order._id} via ${normalizedPaymentMethod}`,
-      user: getCustomerNameFromOrder(order),
-      entityId: order._id,
-      entityType: "Order",
-    });
-
     return res.json({
       success: true,
       message: "Payment proof submitted successfully",
@@ -773,23 +864,9 @@ const approveManualPayment = async (req, res) => {
 
     await order.save();
 
-    await addLog({
-      action: order.isPreorder
-        ? "PREORDER_MANUAL_PAYMENT_APPROVED"
-        : "ORDER_MANUAL_PAYMENT_APPROVED",
-      message: order.isPreorder
-        ? `Manual payment approved for pre-order: ${order._id}`
-        : `Manual payment approved for order: ${order._id}`,
-      user: getActorName(req, "Admin"),
-      entityId: order._id,
-      entityType: "Order",
-    });
-
     return res.json({
       success: true,
-      message: order.isPreorder
-        ? "Manual payment approved and pre-order stock deducted"
-        : "Manual payment approved and stock deducted",
+      message: "Manual payment approved and stock deducted",
     });
   } catch (error) {
     console.error("APPROVE MANUAL PAYMENT ERROR:", error);
@@ -833,18 +910,6 @@ const rejectManualPayment = async (req, res) => {
     order.status = "Payment Failed";
 
     await order.save();
-
-    await addLog({
-      action: order.isPreorder
-        ? "PREORDER_MANUAL_PAYMENT_REJECTED"
-        : "ORDER_MANUAL_PAYMENT_REJECTED",
-      message: order.isPreorder
-        ? `Manual payment rejected for pre-order: ${order._id}`
-        : `Manual payment rejected for order: ${order._id}`,
-      user: getActorName(req, "Admin"),
-      entityId: order._id,
-      entityType: "Order",
-    });
 
     return res.json({
       success: true,
@@ -913,7 +978,9 @@ const updateStatus = async (req, res) => {
       isOnlinePayment(method) &&
       method !== "COD" &&
       currentPaymentStatus !== "paid" &&
-      ["Packing", "Shipped", "Out for Delivery", "Delivered"].includes(normalized)
+      ["Packing", "Shipped", "Out for Delivery", "Delivered"].includes(
+        normalized
+      )
     ) {
       return res.status(400).json({
         success: false,
@@ -929,14 +996,6 @@ const updateStatus = async (req, res) => {
     }
 
     await order.save();
-
-    await addLog({
-      action: "ORDER_STATUS_UPDATED",
-      message: `Order status updated: ${order._id} -> ${normalized}`,
-      user: getActorName(req, "Admin"),
-      entityId: order._id,
-      entityType: "Order",
-    });
 
     return res.json({
       success: true,
@@ -976,7 +1035,11 @@ const receiveOrder = async (req, res) => {
       });
     }
 
-    if (isOnlinePayment(method) && method !== "COD" && currentPaymentStatus !== "paid") {
+    if (
+      isOnlinePayment(method) &&
+      method !== "COD" &&
+      currentPaymentStatus !== "paid"
+    ) {
       return res.status(400).json({
         success: false,
         message: "Cannot mark as received. Payment is not paid yet.",
@@ -991,14 +1054,6 @@ const receiveOrder = async (req, res) => {
     }
 
     await order.save();
-
-    await addLog({
-      action: "ORDER_RECEIVED",
-      message: `Order received by customer: ${order._id}`,
-      user: getCustomerNameFromOrder(order),
-      entityId: order._id,
-      entityType: "Order",
-    });
 
     return res.json({
       success: true,
@@ -1053,16 +1108,6 @@ const cancelOrder = async (req, res) => {
 
     await order.save();
 
-    await addLog({
-      action: order.isPreorder ? "PREORDER_CANCELLED" : "ORDER_CANCELLED",
-      message: order.isPreorder
-        ? `Pre-order cancelled: ${order._id}`
-        : `Order cancelled: ${order._id}`,
-      user: getCustomerNameFromOrder(order),
-      entityId: order._id,
-      entityType: "Order",
-    });
-
     return res.json({
       success: true,
       message: "Order cancelled successfully",
@@ -1080,6 +1125,7 @@ export {
   placeOrder,
   createPaymongoCheckout,
   paymongoWebhook,
+  updateTrackingNumber,
   submitPaymentProof,
   approveManualPayment,
   rejectManualPayment,

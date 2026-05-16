@@ -6,6 +6,7 @@ import {
   rejectManualPayment,
   createPaymongoCheckout,
   paymongoWebhook,
+  updateTrackingNumber,
   allOrders,
   userOrders,
   updateStatus,
@@ -44,8 +45,6 @@ orderRouter.post("/cancel", authUser, cancelOrder);
 // ==============================
 // PAYMONGO WEBHOOK
 // ==============================
-// Important: no authUser/adminAuth here.
-// PayMongo must be able to call this endpoint.
 orderRouter.post("/paymongo-webhook", paymongoWebhook);
 
 // ==============================
@@ -53,6 +52,7 @@ orderRouter.post("/paymongo-webhook", paymongoWebhook);
 // ==============================
 orderRouter.get("/list", adminAuth, allOrders);
 orderRouter.post("/status", adminAuth, updateStatus);
+orderRouter.post("/tracking", adminAuth, updateTrackingNumber);
 orderRouter.post("/approve-payment", adminAuth, approveManualPayment);
 orderRouter.post("/reject-payment", adminAuth, rejectManualPayment);
 
