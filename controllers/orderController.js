@@ -1,3 +1,4 @@
+import axios from "axios";
 import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import Product from "../models/productModel.js";
@@ -27,8 +28,19 @@ const normalizePaymentMethod = (method) => {
   if (value === "gcash") return "GCash";
   if (value === "maya" || value === "paymaya") return "Maya";
   if (value === "gotyme" || value === "go tyme") return "GoTyme";
+  if (value === "paymongo" || value === "online payment") return "PayMongo";
 
   return "COD";
+};
+
+const isOnlinePayment = (method) => {
+  return ["GCash", "Maya", "GoTyme", "PayMongo"].includes(
+    normalizePaymentMethod(method)
+  );
+};
+
+const isManualPayment = (method) => {
+  return ["GCash", "Maya", "GoTyme"].includes(normalizePaymentMethod(method));
 };
 
 const isAdmin = (req) => req.user?.role === "admin";
@@ -71,36 +83,23 @@ const normalizeAddress = (address = {}) => ({
 });
 
 const getProductImage = (product, item) => {
-  if (item?.image && String(item.image).trim()) {
-    return String(item.image).trim();
-  }
-
-  if (Array.isArray(product?.images) && product.images.length > 0) {
-    return product.images[0];
-  }
-
-  if (product?.image && String(product.image).trim()) {
-    return String(product.image).trim();
-  }
-
+  if (item?.image && String(item.image).trim()) return String(item.image).trim();
+  if (Array.isArray(product?.images) && product.images.length > 0) return product.images[0];
+  if (product?.image && String(product.image).trim()) return String(product.image).trim();
   return "";
 };
 
 const getCustomerNameFromOrder = (order) =>
-  `${order?.address?.firstName || ""} ${
-    order?.address?.lastName || ""
-  }`.trim() || "Customer";
+  `${order?.address?.firstName || ""} ${order?.address?.lastName || ""}`.trim() ||
+  "Customer";
 
 const getCustomerNameFromAddress = (address) =>
-  `${address?.firstName || ""} ${address?.lastName || ""}`.trim() ||
-  "Customer";
+  `${address?.firstName || ""} ${address?.lastName || ""}`.trim() || "Customer";
 
 const getMapValue = (mapLike, key) => {
   const sizeKey = String(key || "").toUpperCase();
 
-  if (mapLike instanceof Map) {
-    return Number(mapLike.get(sizeKey) || 0);
-  }
+  if (mapLike instanceof Map) return Number(mapLike.get(sizeKey) || 0);
 
   return Number(mapLike?.[sizeKey] || 0);
 };
@@ -121,7 +120,6 @@ const setMapValue = (product, field, key, value) => {
 };
 
 const getStockValue = (product, sizeKey) => getMapValue(product?.stock, sizeKey);
-
 const getPreorderValue = (product, sizeKey) =>
   getMapValue(product?.preorderStock, sizeKey);
 
@@ -139,11 +137,10 @@ const isPreorderMode = (product, sizeKey) => {
 
 const shouldShowOrderInLists = (order) => {
   const method = normalizePaymentMethod(order?.paymentMethod);
-  const paymentStatus = String(order?.paymentStatus || "")
-    .trim()
-    .toLowerCase();
+  const paymentStatus = String(order?.paymentStatus || "").trim().toLowerCase();
 
   if (method === "COD") return true;
+  if (method === "PayMongo") return ["pending", "paid", "failed"].includes(paymentStatus);
 
   return ["verifying", "paid", "failed"].includes(paymentStatus);
 };
@@ -163,14 +160,10 @@ const validateAndNormalizeItems = async (items) => {
 
     const productBranch = product.branch || "branch1";
 
-    if (!orderBranch) {
-      orderBranch = productBranch;
-    }
+    if (!orderBranch) orderBranch = productBranch;
 
     if (orderBranch !== productBranch) {
-      const err = new Error(
-        "All items in one checkout must be from the same branch"
-      );
+      const err = new Error("All items in one checkout must be from the same branch");
       err.statusCode = 400;
       throw err;
     }
@@ -195,9 +188,7 @@ const validateAndNormalizeItems = async (items) => {
     }
 
     if (preorderMode && preorderStock < quantity) {
-      const err = new Error(
-        `Pre-order stock not enough for ${product.name} (${sizeKey})`
-      );
+      const err = new Error(`Pre-order stock not enough for ${product.name} (${sizeKey})`);
       err.statusCode = 400;
       throw err;
     }
@@ -246,29 +237,12 @@ const deductOrderStock = async (items) => {
       const availablePreorder = getPreorderValue(product, sizeKey);
 
       if (availablePreorder < quantity) {
-        const err = new Error(
-          `Pre-order stock issue for ${product.name} (${sizeKey})`
-        );
+        const err = new Error(`Pre-order stock issue for ${product.name} (${sizeKey})`);
         err.statusCode = 400;
         throw err;
       }
 
-      setMapValue(
-        product,
-        "preorderStock",
-        sizeKey,
-        availablePreorder - quantity
-      );
-
-      await product.save();
-
-      await addLog({
-        action: "ORDER_PREORDER_STOCK_DEDUCTED",
-        message: `Pre-order stock deducted for order item: ${product.name} (${sizeKey}) -${quantity}`,
-        user: "System",
-        entityId: product._id,
-        entityType: "Product",
-      });
+      setMapValue(product, "preorderStock", sizeKey, availablePreorder - quantity);
     } else {
       const available = getStockValue(product, sizeKey);
 
@@ -279,24 +253,25 @@ const deductOrderStock = async (items) => {
       }
 
       setMapValue(product, "stock", sizeKey, available - quantity);
-
-      await product.save();
-
-      await addLog({
-        action: "ORDER_STOCK_DEDUCTED",
-        message: `Stock deducted for order item: ${product.name} (${sizeKey}) -${quantity}`,
-        user: "System",
-        entityId: product._id,
-        entityType: "Product",
-      });
     }
+
+    await product.save();
+
+    await addLog({
+      action: preorderMode ? "ORDER_PREORDER_STOCK_DEDUCTED" : "ORDER_STOCK_DEDUCTED",
+      message: `${preorderMode ? "Pre-order stock" : "Stock"} deducted for order item: ${
+        product.name
+      } (${sizeKey}) -${quantity}`,
+      user: "System",
+      entityId: product._id,
+      entityType: "Product",
+    });
   }
 };
 
 const restoreOrderStock = async (items) => {
   for (const item of items) {
     const product = await Product.findById(item.productId);
-
     if (!product) continue;
 
     const sizeKey = String(item.size || "S").toUpperCase();
@@ -304,28 +279,19 @@ const restoreOrderStock = async (items) => {
 
     if (item.isPreorder) {
       const availablePreorder = getPreorderValue(product, sizeKey);
-
-      setMapValue(
-        product,
-        "preorderStock",
-        sizeKey,
-        availablePreorder + quantity
-      );
+      setMapValue(product, "preorderStock", sizeKey, availablePreorder + quantity);
     } else {
       const available = getStockValue(product, sizeKey);
-
       setMapValue(product, "stock", sizeKey, available + quantity);
     }
 
     await product.save();
 
     await addLog({
-      action: item.isPreorder
-        ? "ORDER_PREORDER_STOCK_RESTORED"
-        : "ORDER_STOCK_RESTORED",
-      message: `${
-        item.isPreorder ? "Pre-order stock" : "Stock"
-      } restored for order item: ${product.name} (${sizeKey}) +${quantity}`,
+      action: item.isPreorder ? "ORDER_PREORDER_STOCK_RESTORED" : "ORDER_STOCK_RESTORED",
+      message: `${item.isPreorder ? "Pre-order stock" : "Stock"} restored for order item: ${
+        product.name
+      } (${sizeKey}) +${quantity}`,
       user: "System",
       entityId: product._id,
       entityType: "Product",
@@ -354,9 +320,7 @@ const placeOrder = async (req, res) => {
 
     const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
 
-    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(
-      items
-    );
+    const { orderBranch, normalizedItems } = await validateAndNormalizeItems(items);
 
     const normalizedAddress = normalizeAddress(address);
     const hasPreorderItems = normalizedItems.some((item) => item.isPreorder);
@@ -365,7 +329,7 @@ const placeOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          "Cash on Delivery is not available for pre-order items. Please use GCash, Maya, or GoTyme.",
+          "Cash on Delivery is not available for pre-order items. Please use PayMongo.",
       });
     }
 
@@ -404,12 +368,13 @@ const placeOrder = async (req, res) => {
       paymentStatus:
         normalizedPaymentMethod === "COD" ? "cod_pending" : "pending",
       status:
-        normalizedPaymentMethod === "COD"
-          ? "Order Placed"
-          : "Pending Payment",
+        normalizedPaymentMethod === "COD" ? "Order Placed" : "Pending Payment",
       branch: orderBranch,
       referenceNumber: "",
       paymentProofImage: "",
+      paymongoCheckoutId: "",
+      paymongoPaymentIntentId: "",
+      paymongoPaymentId: "",
       isPreorder: hasPreorderItems,
       deliveryEstimate: finalDeliveryEstimate,
       preorderShipDate,
@@ -446,6 +411,227 @@ const placeOrder = async (req, res) => {
   } catch (error) {
     console.error("ORDER ERROR:", error);
     return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const createPaymongoCheckout = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const authUserId = req.userId || req.user?.id || req.user?._id;
+
+    if (!process.env.PAYMONGO_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "PAYMONGO_SECRET_KEY is missing in backend .env",
+      });
+    }
+
+    if (!process.env.FRONTEND_URL) {
+      return res.status(500).json({
+        success: false,
+        message: "FRONTEND_URL is missing in backend .env",
+      });
+    }
+
+    const order = await orderModel.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (!authUserId || String(order.userId) !== String(authUserId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized access to this order",
+      });
+    }
+
+    if (order.paymentStatus === "paid" || order.payment === true) {
+      return res.status(400).json({
+        success: false,
+        message: "This order is already paid",
+      });
+    }
+
+    const amountInCentavos = Math.round(Number(order.amount || 0) * 100);
+
+    if (amountInCentavos < 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid PayMongo amount",
+      });
+    }
+
+    const lineItems = [
+      {
+        currency: "PHP",
+        amount: amountInCentavos,
+        name: `Saint Clothing Order #${String(order._id).slice(-8).toUpperCase()}`,
+        quantity: 1,
+      },
+    ];
+
+    const paymongoResponse = await axios.post(
+      "https://api.paymongo.com/v1/checkout_sessions",
+      {
+        data: {
+          attributes: {
+            send_email_receipt: true,
+            show_description: true,
+            show_line_items: true,
+            description: `Saint Clothing Order ${order._id}`,
+            line_items: lineItems,
+            payment_method_types: ["gcash", "paymaya", "card"],
+            success_url: `${process.env.FRONTEND_URL}/payment-submitted?orderId=${order._id}`,
+            cancel_url: `${process.env.FRONTEND_URL}/orders?payment=cancelled&orderId=${order._id}`,
+          },
+        },
+      },
+      {
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(`${process.env.PAYMONGO_SECRET_KEY}:`).toString("base64"),
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const checkoutSession = paymongoResponse.data.data;
+
+    order.paymentMethod = "PayMongo";
+    order.paymentStatus = "pending";
+    order.status = "Pending Payment";
+    order.paymongoCheckoutId = checkoutSession.id;
+
+    await order.save();
+
+    await addLog({
+      action: "PAYMONGO_CHECKOUT_CREATED",
+      message: `PayMongo checkout created for order: ${order._id}`,
+      user: getCustomerNameFromOrder(order),
+      entityId: order._id,
+      entityType: "Order",
+    });
+
+    return res.json({
+      success: true,
+      checkoutUrl: checkoutSession.attributes.checkout_url,
+      checkoutId: checkoutSession.id,
+    });
+  } catch (error) {
+    console.error(
+      "CREATE PAYMONGO CHECKOUT ERROR:",
+      error.response?.data || error.message
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.response?.data?.errors?.[0]?.detail ||
+        error.response?.data?.errors?.[0]?.message ||
+        "Failed to create PayMongo checkout",
+    });
+  }
+};
+
+const markOrderAsPaidFromPaymongo = async (order, paymentData = {}) => {
+  if (!order.payment) {
+    await deductOrderStock(order.items);
+  }
+
+  order.payment = true;
+  order.paymentStatus = "paid";
+  order.status = "Order Placed";
+  order.paymongoPaymentId = paymentData?.id || order.paymongoPaymentId || "";
+  order.paymongoPaymentIntentId =
+    paymentData?.attributes?.payment_intent_id ||
+    paymentData?.attributes?.payment_intent ||
+    order.paymongoPaymentIntentId ||
+    "";
+
+  await order.save();
+
+  await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+
+  await addLog({
+    action: order.isPreorder ? "PREORDER_PAYMONGO_PAID" : "ORDER_PAYMONGO_PAID",
+    message: order.isPreorder
+      ? `PayMongo payment completed for pre-order: ${order._id}`
+      : `PayMongo payment completed for order: ${order._id}`,
+    user: "PayMongo",
+    entityId: order._id,
+    entityType: "Order",
+  });
+};
+
+const paymongoWebhook = async (req, res) => {
+  try {
+    const event = req.body?.data;
+    const eventType = event?.attributes?.type;
+    const eventData = event?.attributes?.data;
+
+    console.log("PAYMONGO WEBHOOK EVENT:", eventType);
+
+    const checkoutSessionId =
+      eventData?.attributes?.checkout_session_id ||
+      eventData?.attributes?.checkout_session ||
+      eventData?.id ||
+      "";
+
+    const paymentIntentId =
+      eventData?.attributes?.payment_intent_id ||
+      eventData?.attributes?.payment_intent ||
+      "";
+
+    let order = null;
+
+    if (checkoutSessionId) {
+      order = await orderModel.findOne({
+        paymongoCheckoutId: checkoutSessionId,
+      });
+    }
+
+    if (!order && paymentIntentId) {
+      order = await orderModel.findOne({
+        paymongoPaymentIntentId: paymentIntentId,
+      });
+    }
+
+    if (!order) {
+      console.log("PAYMONGO WEBHOOK: Order not found for event");
+      return res.json({ success: true });
+    }
+
+    if (
+      eventType === "checkout_session.payment.paid" ||
+      eventType === "payment.paid"
+    ) {
+      if (order.paymentStatus !== "paid") {
+        await markOrderAsPaidFromPaymongo(order, eventData);
+      }
+    }
+
+    if (
+      eventType === "checkout_session.payment.failed" ||
+      eventType === "payment.failed"
+    ) {
+      order.payment = false;
+      order.paymentStatus = "failed";
+      order.status = "Payment Failed";
+      await order.save();
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("PAYMONGO WEBHOOK ERROR:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -498,7 +684,7 @@ const submitPaymentProof = async (req, res) => {
       paymentMethod || order.paymentMethod
     );
 
-    if (!["GCash", "Maya", "GoTyme"].includes(normalizedPaymentMethod)) {
+    if (!isManualPayment(normalizedPaymentMethod)) {
       return res.status(400).json({
         success: false,
         message: "Only manual payment methods can submit payment proof",
@@ -547,7 +733,6 @@ const submitPaymentProof = async (req, res) => {
 const approveManualPayment = async (req, res) => {
   try {
     const { orderId } = req.body;
-
     const order = await orderModel.findById(orderId);
 
     if (!order) {
@@ -566,7 +751,7 @@ const approveManualPayment = async (req, res) => {
 
     const method = normalizePaymentMethod(order.paymentMethod);
 
-    if (!["GCash", "Maya", "GoTyme"].includes(method)) {
+    if (!isManualPayment(method)) {
       return res.status(400).json({
         success: false,
         message: "Only manual payment orders can be approved here",
@@ -618,7 +803,6 @@ const approveManualPayment = async (req, res) => {
 const rejectManualPayment = async (req, res) => {
   try {
     const { orderId } = req.body;
-
     const order = await orderModel.findById(orderId);
 
     if (!order) {
@@ -637,7 +821,7 @@ const rejectManualPayment = async (req, res) => {
 
     const method = normalizePaymentMethod(order.paymentMethod);
 
-    if (!["GCash", "Maya", "GoTyme"].includes(method)) {
+    if (!isManualPayment(method)) {
       return res.status(400).json({
         success: false,
         message: "Only manual payment orders can be rejected here",
@@ -726,15 +910,14 @@ const updateStatus = async (req, res) => {
       .toLowerCase();
 
     if (
-      ["GCash", "Maya", "GoTyme"].includes(method) &&
+      isOnlinePayment(method) &&
+      method !== "COD" &&
       currentPaymentStatus !== "paid" &&
-      ["Packing", "Shipped", "Out for Delivery", "Delivered"].includes(
-        normalized
-      )
+      ["Packing", "Shipped", "Out for Delivery", "Delivered"].includes(normalized)
     ) {
       return res.status(400).json({
         success: false,
-        message: "Cannot update delivery. Payment not approved yet.",
+        message: "Cannot update delivery. Payment is not paid yet.",
       });
     }
 
@@ -793,13 +976,10 @@ const receiveOrder = async (req, res) => {
       });
     }
 
-    if (
-      ["GCash", "Maya", "GoTyme"].includes(method) &&
-      currentPaymentStatus !== "paid"
-    ) {
+    if (isOnlinePayment(method) && method !== "COD" && currentPaymentStatus !== "paid") {
       return res.status(400).json({
         success: false,
-        message: "Cannot mark as received. Payment not approved yet.",
+        message: "Cannot mark as received. Payment is not paid yet.",
       });
     }
 
@@ -860,14 +1040,14 @@ const cancelOrder = async (req, res) => {
       });
     }
 
-    if (order.status !== "Cancelled") {
+    if (order.status !== "Cancelled" && order.paymentStatus !== "pending") {
       await restoreOrderStock(order.items);
     }
 
     order.status = "Cancelled";
     order.payment = false;
 
-    if (["GCash", "Maya", "GoTyme"].includes(order.paymentMethod)) {
+    if (isOnlinePayment(order.paymentMethod)) {
       order.paymentStatus = "failed";
     }
 
@@ -898,6 +1078,8 @@ const cancelOrder = async (req, res) => {
 
 export {
   placeOrder,
+  createPaymongoCheckout,
+  paymongoWebhook,
   submitPaymentProof,
   approveManualPayment,
   rejectManualPayment,

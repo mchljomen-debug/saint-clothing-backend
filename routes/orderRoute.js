@@ -4,6 +4,8 @@ import {
   submitPaymentProof,
   approveManualPayment,
   rejectManualPayment,
+  createPaymongoCheckout,
+  paymongoWebhook,
   allOrders,
   userOrders,
   updateStatus,
@@ -23,6 +25,12 @@ const orderRouter = express.Router();
 orderRouter.post("/place", authUser, placeOrder);
 
 orderRouter.post(
+  "/create-paymongo-checkout",
+  authUser,
+  createPaymongoCheckout
+);
+
+orderRouter.post(
   "/submit-payment-proof",
   authUser,
   upload.single("paymentProofImage"),
@@ -32,6 +40,13 @@ orderRouter.post(
 orderRouter.post("/userorders", authUser, userOrders);
 orderRouter.post("/receive", authUser, receiveOrder);
 orderRouter.post("/cancel", authUser, cancelOrder);
+
+// ==============================
+// PAYMONGO WEBHOOK
+// ==============================
+// Important: no authUser/adminAuth here.
+// PayMongo must be able to call this endpoint.
+orderRouter.post("/paymongo-webhook", paymongoWebhook);
 
 // ==============================
 // ADMIN ROUTES

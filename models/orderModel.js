@@ -18,7 +18,6 @@ const orderItemSchema = new mongoose.Schema(
     sku: { type: String, default: "" },
     groupCode: { type: String, default: "" },
 
-    // Pre-order item details
     isPreorder: { type: Boolean, default: false },
     expectedRestockDate: { type: Date, default: null },
     preorderNote: { type: String, default: "" },
@@ -66,7 +65,7 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["COD", "GCash", "Maya", "GoTyme"],
+      enum: ["COD", "GCash", "Maya", "GoTyme", "PayMongo"],
       default: "COD",
     },
 
@@ -91,18 +90,31 @@ const orderSchema = new mongoose.Schema(
       default: "",
     },
 
+    paymongoCheckoutId: {
+      type: String,
+      default: "",
+    },
+
+    paymongoPaymentIntentId: {
+      type: String,
+      default: "",
+    },
+
+    paymongoPaymentId: {
+      type: String,
+      default: "",
+    },
+
     branch: {
       type: String,
       default: "branch1",
     },
 
-    // Whole-order preorder marker
     isPreorder: {
       type: Boolean,
       default: false,
     },
 
-    // Delivery estimate for normal orders and preorder orders
     deliveryEstimate: {
       minDays: { type: Number, default: 0 },
       maxDays: { type: Number, default: 0 },
@@ -111,7 +123,6 @@ const orderSchema = new mongoose.Schema(
       shipsOn: { type: Date, default: null },
     },
 
-    // Main preorder ship date shown as "Ships on [date]"
     preorderShipDate: {
       type: Date,
       default: null,
