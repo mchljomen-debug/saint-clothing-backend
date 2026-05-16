@@ -1075,7 +1075,6 @@ const receiveOrder = async (req, res) => {
       .trim()
       .toLowerCase();
 
-    const currentStatus = normalizeStatus(order.status);
 
     if (!["Out for Delivery", "Delivered"].includes(currentStatus)) {
       return res.status(400).json({
