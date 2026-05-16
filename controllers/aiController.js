@@ -5,9 +5,6 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-/* ==============================
-   TEXT STYLE SUGGESTION
-============================== */
 export const generateOutfitSuggestion = async (req, res) => {
   try {
     const { top, bottom, style } = req.body;
@@ -47,9 +44,6 @@ Keep response short and clean.
   }
 };
 
-/* ==============================
-   AI GENERATED OUTFIT IMAGE
-============================== */
 export const generateOutfitImage = async (req, res) => {
   try {
     if (!process.env.GEMINI_API_KEY) {
@@ -127,7 +121,7 @@ Rules:
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-preview-image-generation",
+      model: "gemini-2.5-flash-image",
       contents: [
         {
           role: "user",
@@ -144,8 +138,7 @@ Rules:
       response?.response?.candidates ||
       [];
 
-    const responseParts =
-      candidates?.[0]?.content?.parts || [];
+    const responseParts = candidates?.[0]?.content?.parts || [];
 
     let image = "";
 
@@ -167,7 +160,7 @@ Rules:
       return res.status(500).json({
         success: false,
         message:
-          "Gemini did not return an image. Check if image generation is enabled for your API key.",
+          "Gemini did not return an image. Your API key may not support image generation.",
       });
     }
 
