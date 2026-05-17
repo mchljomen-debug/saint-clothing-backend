@@ -8,6 +8,7 @@ import uploadBufferToCloudinary, {
   uploadProductImageToCloudinary,
 } from "../utils/cloudinaryUpload.js";
 import { uploadModelToSupabase } from "../utils/supabaseUpload.js";
+import inventoryLogModel from "../models/inventoryLogModel.js";
 
 const SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"];
 
@@ -255,6 +256,64 @@ const autoGeneratePreorderStock = ({
   });
 
   return nextPreorderStock;
+};
+
+// ==============================
+// INVENTORY LOGS
+// ==============================
+const createInventoryLogs = async ({
+  product,
+  oldStock = {},
+  newStock = {},
+  oldPreorderStock = {},
+  newPreorderStock = {},
+  updatedBy = "Admin",
+}) => {
+  const logs = [];
+
+  SIZE_ORDER.forEach((size) => {
+    const oldActual = getSizeQty(oldStock, size);
+    const newActual = getSizeQty(newStock, size);
+
+    if (oldActual !== newActual) {
+      logs.push({
+        productId: product._id,
+        productName: product.name,
+        sku: product.sku || "N/A",
+        branch: product.branch,
+        size,
+        stockType: "Actual",
+        action: newActual > oldActual ? "RESTOCK" : "DEDUCT",
+        oldQty: oldActual,
+        newQty: newActual,
+        difference: newActual - oldActual,
+        updatedBy,
+      });
+    }
+
+    const oldPre = getSizeQty(oldPreorderStock, size);
+    const newPre = getSizeQty(newPreorderStock, size);
+
+    if (oldPre !== newPre) {
+      logs.push({
+        productId: product._id,
+        productName: product.name,
+        sku: product.sku || "N/A",
+        branch: product.branch,
+        size,
+        stockType: "Pre-order",
+        action: "PREORDER_UPDATE",
+        oldQty: oldPre,
+        newQty: newPre,
+        difference: newPre - oldPre,
+        updatedBy,
+      });
+    }
+  });
+
+  if (logs.length > 0) {
+    await inventoryLogModel.insertMany(logs);
+  }
 };
 
 // ==============================
@@ -1028,6 +1087,7 @@ const listDeletedProducts = async (req, res) => {
 const updateStock = async (req, res) => {
   try {
     const { id } = req.params;
+
     const {
       stock,
       preorderStock,
@@ -1037,6 +1097,7 @@ const updateStock = async (req, res) => {
       preorderAutoStock,
       preorderRestockDate,
       preorderNote,
+      updatedBy,
     } = req.body;
 
     const product = await Product.findById(id);
@@ -1054,6 +1115,9 @@ const updateStock = async (req, res) => {
         message: "Access denied for this branch product",
       });
     }
+
+    const oldStock = parseObjectField(product.stock, {});
+    const oldPreorderStock = parseObjectField(product.preorderStock, {});
 
     const nextStock =
       stock !== undefined
@@ -1111,10 +1175,21 @@ const updateStock = async (req, res) => {
 
     await product.save();
 
+    const finalUpdatedBy = updatedBy || getActorName(req, "Admin");
+
+    await createInventoryLogs({
+      product,
+      oldStock,
+      newStock: nextStock,
+      oldPreorderStock,
+      newPreorderStock: nextPreorderStock,
+      updatedBy: finalUpdatedBy,
+    });
+
     await addLog({
       action: "PRODUCT_STOCK_UPDATED",
       message: `Inventory/pre-order updated for: ${formatProductName(product)}`,
-      user: getActorName(req, "Admin"),
+      user: finalUpdatedBy,
       entityId: product._id,
       entityType: "Product",
     });
@@ -1126,6 +1201,7 @@ const updateStock = async (req, res) => {
     });
   } catch (error) {
     console.error("UPDATE STOCK ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -1395,6 +1471,35 @@ const addReview = async (req, res) => {
     });
   }
 };
+// ==============================
+// GET INVENTORY LOGS
+// ==============================
+const getInventoryLogs = async (req, res) => {
+  try {
+    const filter = isAdmin(req)
+      ? {}
+      : {
+          branch: normalizeBranchCode(req.user?.branch),
+        };
+
+    const logs = await inventoryLogModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .limit(150);
+
+    return res.json({
+      success: true,
+      logs,
+    });
+  } catch (error) {
+    console.error("GET INVENTORY LOGS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 export {
   addProduct,
@@ -1410,4 +1515,5 @@ export {
   deductStock,
   addReview,
   canUserReviewProduct,
+  getInventoryLogs,
 };

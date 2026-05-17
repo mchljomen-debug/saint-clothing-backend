@@ -1,4 +1,5 @@
 import express from "express";
+
 import {
   addProduct,
   listProducts,
@@ -13,6 +14,7 @@ import {
   deductStock,
   addReview,
   canUserReviewProduct,
+  getInventoryLogs,
 } from "../controllers/productController.js";
 
 import upload from "../middleware/multer.js";
@@ -31,29 +33,96 @@ const productUpload = upload.fields([
   { name: "outfitImage", maxCount: 1 },
 ]);
 
+// ==============================
 // ADD / UPDATE PRODUCT
+// ==============================
 router.post("/add", adminAuth, productUpload, addProduct);
-router.put("/update/:id", adminAuth, productUpload, updateProduct);
 
+router.put(
+  "/update/:id",
+  adminAuth,
+  productUpload,
+  updateProduct
+);
+
+// ==============================
 // INVENTORY / PRE-ORDER STOCK
-router.put("/update-stock/:id", adminAuth, updateStock);
-router.post("/deduct-stock", adminAuth, deductStock);
+// ==============================
+router.put(
+  "/update-stock/:id",
+  adminAuth,
+  updateStock
+);
 
+router.post(
+  "/deduct-stock",
+  adminAuth,
+  deductStock
+);
+
+// REAL INVENTORY LOGS
+router.get(
+  "/inventory-logs",
+  adminAuth,
+  getInventoryLogs
+);
+
+// ==============================
 // PUBLIC PRODUCT
+// ==============================
 router.get("/single/:id", getSingleProduct);
+
 router.get("/list", listProducts);
 
+// ==============================
 // REVIEWS
-router.get("/can-review/:id", authUser, canUserReviewProduct);
-router.post("/review/:id", authUser, addReview);
+// ==============================
+router.get(
+  "/can-review/:id",
+  authUser,
+  canUserReviewProduct
+);
 
+router.post(
+  "/review/:id",
+  authUser,
+  addReview
+);
+
+// ==============================
 // ADMIN PRODUCT
-router.get("/admin-list", adminAuth, listAdminProducts);
+// ==============================
+router.get(
+  "/admin-list",
+  adminAuth,
+  listAdminProducts
+);
 
+// ==============================
 // TRASH / DELETE
-router.post("/remove", adminAuth, deleteProduct);
-router.post("/restore", adminAuth, restoreProduct);
-router.post("/permanent-delete", adminAuth, permanentDelete);
-router.get("/trash", adminAuth, listDeletedProducts);
+// ==============================
+router.post(
+  "/remove",
+  adminAuth,
+  deleteProduct
+);
+
+router.post(
+  "/restore",
+  adminAuth,
+  restoreProduct
+);
+
+router.post(
+  "/permanent-delete",
+  adminAuth,
+  permanentDelete
+);
+
+router.get(
+  "/trash",
+  adminAuth,
+  listDeletedProducts
+);
 
 export default router;
