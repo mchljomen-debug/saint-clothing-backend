@@ -20,7 +20,7 @@ import policyRouter from "./routes/policyRoute.js";
 import categoryRouter from "./routes/categoryRoute.js";
 import trashRouter from "./routes/trashRoute.js";
 import aiRouter from "./routes/aiRoute.js";
-
+import tryOnRouter from "./routes/tryOnRoute.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -125,7 +125,7 @@ app.use("/api/recommendation", recommendationRouter);
 app.use("/api/policy", policyRouter);
 app.use("/api/category", categoryRouter);
 app.use("/api/trash", trashRouter);
-
+app.use("/api/tryon", tryOnRouter);
 /* ===============================
    AI ROUTES
 ================================ */
