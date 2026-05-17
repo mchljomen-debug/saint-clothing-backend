@@ -44,6 +44,22 @@ const normalizeAddress = (rawAddress = {}) => ({
   psgcBarangayCode: rawAddress?.psgcBarangayCode || "",
 });
 
+const isAddressComplete = (address = {}) => {
+  const clean = normalizeAddress(address);
+  const isNcr = String(clean.region || "").toLowerCase().includes("ncr");
+
+  return (
+    clean.houseUnit &&
+    clean.street &&
+    clean.barangay &&
+    clean.city &&
+    clean.region &&
+    clean.zipcode &&
+    clean.country &&
+    (clean.province || isNcr)
+  );
+};
+
 const validateStrongPassword = (password = "") => {
   if (!password) return "Password is required";
   if (password.length < 8) return "Password must be at least 8 characters";
@@ -203,7 +219,10 @@ export const checkEmail = async (req, res) => {
       return res.json({ exists: false });
     }
 
-    const user = await userModel.findOne({ email });
+    const user = await userModel.findOne({
+      email: String(email || "").trim().toLowerCase(),
+    });
+
     return res.json({ exists: !!user });
   } catch (err) {
     console.log("CHECK EMAIL ERROR:", err);
@@ -216,18 +235,18 @@ export const checkEmail = async (req, res) => {
 
 export const sendOtpController = async (req, res) => {
   try {
-    const { email } = req.body;
+    const cleanEmail = String(req.body.email || "").trim().toLowerCase();
 
-    console.log("SEND OTP REQUEST EMAIL:", email);
+    console.log("SEND OTP REQUEST EMAIL:", cleanEmail);
 
-    if (!validator.isEmail(email)) {
+    if (!validator.isEmail(cleanEmail)) {
       return res.status(400).json({
         success: false,
         message: "Invalid email",
       });
     }
 
-    const existingUser = await userModel.findOne({ email });
+    const existingUser = await userModel.findOne({ email: cleanEmail });
 
     if (existingUser) {
       return res.status(400).json({
@@ -239,9 +258,9 @@ export const sendOtpController = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     await OtpModel.findOneAndUpdate(
-      { email },
+      { email: cleanEmail },
       {
-        email,
+        email: cleanEmail,
         otp,
         expiresAt: Date.now() + 60 * 1000,
         verified: false,
@@ -249,12 +268,12 @@ export const sendOtpController = async (req, res) => {
       { upsert: true }
     );
 
-    await sendOTP(email, otp);
+    await sendOTP(cleanEmail, otp);
 
     await addLog({
       action: "REGISTRATION_OTP_SENT",
-      message: `Registration OTP sent to ${email}`,
-      user: email,
+      message: `Registration OTP sent to ${cleanEmail}`,
+      user: cleanEmail,
       entityType: "Auth",
     });
 
@@ -273,9 +292,10 @@ export const sendOtpController = async (req, res) => {
 
 export const verifyOtp = async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const cleanEmail = String(req.body.email || "").trim().toLowerCase();
+    const otp = String(req.body.otp || "").trim();
 
-    const record = await OtpModel.findOne({ email });
+    const record = await OtpModel.findOne({ email: cleanEmail });
 
     if (!record) {
       return res.status(400).json({
@@ -303,8 +323,8 @@ export const verifyOtp = async (req, res) => {
 
     await addLog({
       action: "REGISTRATION_OTP_VERIFIED",
-      message: `Registration OTP verified for ${email}`,
-      user: email,
+      message: `Registration OTP verified for ${cleanEmail}`,
+      user: cleanEmail,
       entityType: "Auth",
     });
 
@@ -326,15 +346,21 @@ export const registerUser = async (req, res) => {
     const {
       firstName,
       lastName,
+      name,
       email,
       password,
       confirmPassword,
+      phone,
+      address,
       acceptedTerms,
+      termsVersion,
     } = req.body;
 
     const cleanFirstName = String(firstName || "").trim();
     const cleanLastName = String(lastName || "").trim();
     const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanPhone = String(phone || "").trim().replace(/\D/g, "");
+    const cleanAddress = normalizeAddress(address || {});
 
     if (!cleanFirstName) {
       return res.status(400).json({
@@ -357,7 +383,29 @@ export const registerUser = async (req, res) => {
       });
     }
 
+    if (!cleanPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required",
+      });
+    }
+
+    if (!/^\d+$/.test(cleanPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number must contain numbers only",
+      });
+    }
+
+    if (!isAddressComplete(cleanAddress)) {
+      return res.status(400).json({
+        success: false,
+        message: "Complete shipping address is required",
+      });
+    }
+
     const existingUser = await userModel.findOne({ email: cleanEmail });
+
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -366,6 +414,7 @@ export const registerUser = async (req, res) => {
     }
 
     const passwordError = validateStrongPassword(password);
+
     if (passwordError) {
       return res.status(400).json({
         success: false,
@@ -387,7 +436,10 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    const otp = await OtpModel.findOne({ email: cleanEmail, verified: true });
+    const otp = await OtpModel.findOne({
+      email: cleanEmail,
+      verified: true,
+    });
 
     if (!otp) {
       return res.status(400).json({
@@ -397,11 +449,16 @@ export const registerUser = async (req, res) => {
     }
 
     const policyDoc = await getOrCreateMainPolicy();
+
     const currentTermsVersion =
-      policyDoc?.version || new Date().toISOString().slice(0, 10);
+      termsVersion ||
+      policyDoc?.version ||
+      new Date().toISOString().slice(0, 10);
 
     const hashed = await bcrypt.hash(password, 10);
-    const fullName = buildFullName(cleanFirstName, cleanLastName);
+
+    const fullName =
+      String(name || "").trim() || buildFullName(cleanFirstName, cleanLastName);
 
     const user = await userModel.create({
       firstName: cleanFirstName,
@@ -411,8 +468,8 @@ export const registerUser = async (req, res) => {
       password: hashed,
       cartData: {},
       avatar: "",
-      phone: "",
-      address: {},
+      phone: cleanPhone,
+      address: cleanAddress,
       isVerified: true,
       termsAccepted: true,
       termsAcceptedAt: new Date(),
@@ -654,7 +711,7 @@ export const updateUserProfile = async (req, res) => {
     }
 
     if (email !== undefined) user.email = String(email).trim().toLowerCase();
-    if (phone !== undefined) user.phone = String(phone).trim();
+    if (phone !== undefined) user.phone = String(phone).trim().replace(/\D/g, "");
     if (address !== undefined) user.address = normalizeAddress(address);
 
     let fileBuffer = null;
@@ -851,6 +908,7 @@ export const changePassword = async (req, res) => {
     }
 
     const passwordError = validateStrongPassword(newPassword);
+
     if (passwordError) {
       return res.status(400).json({
         success: false,
@@ -989,6 +1047,7 @@ export const resetPassword = async (req, res) => {
     }
 
     const passwordError = validateStrongPassword(newPassword);
+
     if (passwordError) {
       return res.status(400).json({
         success: false,
