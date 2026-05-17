@@ -1089,8 +1089,8 @@ const updateStock = async (req, res) => {
     const { id } = req.params;
 
     const {
-      stock,
-      preorderStock,
+      stockToAdd,
+      preorderStockToAdd,
       preorderEnabled,
       preorderThreshold,
       preorderAutoGenerate,
@@ -1119,10 +1119,22 @@ const updateStock = async (req, res) => {
     const oldStock = parseObjectField(product.stock, {});
     const oldPreorderStock = parseObjectField(product.preorderStock, {});
 
-    const nextStock =
-      stock !== undefined
-        ? parseObjectField(stock, {})
-        : parseObjectField(product.stock, {});
+    const addStockObj = parseObjectField(stockToAdd, {});
+    const addPreorderObj = parseObjectField(preorderStockToAdd, {});
+
+    const nextStock = {};
+    const nextPreorderStockManual = {};
+
+    SIZE_ORDER.forEach((size) => {
+      const currentActual = getSizeQty(oldStock, size);
+      const addActual = Math.max(0, getSizeQty(addStockObj, size));
+
+      const currentPreorder = getSizeQty(oldPreorderStock, size);
+      const addPreorder = Math.max(0, getSizeQty(addPreorderObj, size));
+
+      nextStock[size] = currentActual + addActual;
+      nextPreorderStockManual[size] = currentPreorder + addPreorder;
+    });
 
     const nextPreorderEnabled =
       preorderEnabled !== undefined
@@ -1146,15 +1158,22 @@ const updateStock = async (req, res) => {
 
     const nextPreorderStock = autoGeneratePreorderStock({
       stock: nextStock,
-      preorderStock:
-        preorderStock !== undefined
-          ? parseObjectField(preorderStock, {})
-          : parseObjectField(product.preorderStock, {}),
+      preorderStock: nextPreorderStockManual,
       preorderEnabled: nextPreorderEnabled,
       preorderThreshold: nextPreorderThreshold,
       preorderAutoGenerate: nextPreorderAutoGenerate,
       preorderAutoStock: nextPreorderAutoStock,
     });
+
+    const hasActualAdd = SIZE_ORDER.some((size) => getSizeQty(addStockObj, size) > 0);
+    const hasPreorderAdd = SIZE_ORDER.some((size) => getSizeQty(addPreorderObj, size) > 0);
+
+    if (!hasActualAdd && !hasPreorderAdd) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter stock quantity to add",
+      });
+    }
 
     product.stock = nextStock;
     product.preorderEnabled = nextPreorderEnabled;
@@ -1187,8 +1206,8 @@ const updateStock = async (req, res) => {
     });
 
     await addLog({
-      action: "PRODUCT_STOCK_UPDATED",
-      message: `Inventory/pre-order updated for: ${formatProductName(product)}`,
+      action: "PRODUCT_STOCK_RESTOCKED",
+      message: `Stock added/restocked for: ${formatProductName(product)}`,
       user: finalUpdatedBy,
       entityId: product._id,
       entityType: "Product",
@@ -1196,7 +1215,7 @@ const updateStock = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Inventory updated successfully",
+      message: "Stock added successfully",
       product,
     });
   } catch (error) {
