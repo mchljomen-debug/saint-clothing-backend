@@ -21,6 +21,7 @@ import categoryRouter from "./routes/categoryRoute.js";
 import trashRouter from "./routes/trashRoute.js";
 import aiRouter from "./routes/aiRoute.js";
 import tryOnRouter from "./routes/tryOnRoute.js";
+
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -32,86 +33,109 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /* ===============================
-   LOCAL FILE DIRECTORIES
+LOCAL FILE DIRECTORIES
 ================================ */
+
 const uploadsDir = path.join(__dirname, "uploads");
 const paymentProofsDir = path.join(__dirname, "uploads", "payment-proofs");
 const avatarsDir = path.join(__dirname, "uploads", "avatars");
 const heroDir = path.join(__dirname, "uploads", "hero");
 
 [uploadsDir, paymentProofsDir, avatarsDir, heroDir].forEach((dir) => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
 });
 
 /* ===============================
-   CORS CONFIG
+CORS CONFIG
 ================================ */
+
 const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:3000",
-  "http://localhost:8081",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+    "http://localhost:8081",
+    "http://localhost:8082",
 
-  "https://saint-clothing-frontend.vercel.app",
-  "https://saint-clothing-admin.vercel.app",
+    "https://saint-clothing-frontend.vercel.app",
+    "https://saint-clothing-admin.vercel.app",
 
-  "https://saintclothingbrandph.com",
-  "https://www.saintclothingbrandph.com",
-  "https://admin.saintclothingbrandph.com",
+    "https://saintclothingbrandph.com",
+    "https://www.saintclothingbrandph.com",
+    "https://admin.saintclothingbrandph.com",
 
-  "saintclothingbrandph.com",
-
-  process.env.FRONTEND_URL,
-  process.env.ADMIN_URL,
-].filter(Boolean);
+    process.env.FRONTEND_URL,
+    process.env.ADMIN_URL,
+].filter(Boolean).map((url) => url.replace(/\/$/, ""));
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
+    origin: function (origin, callback) {
+        if (!origin) {
+            return callback(null, true);
+        }
 
-    const cleanOrigin = origin.replace(/\/$/, "");
+        const cleanOrigin = origin.replace(/\/$/, "");
 
-    if (allowedOrigins.includes(cleanOrigin)) {
-      return callback(null, true);
-    }
+        if (allowedOrigins.includes(cleanOrigin)) {
+            return callback(null, true);
+        }
 
-    console.log("Blocked by CORS:", origin);
+        console.log("Blocked by CORS:", origin);
 
-    return callback(
-      new Error(`CORS blocked for origin: ${origin}`)
-    );
-  },
+        return callback(
+            new Error(`CORS blocked for origin: ${origin}`)
+        );
+    },
 
-  credentials: true,
+    credentials: true,
+
+    methods: [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+    ],
+
+    allowedHeaders: [
+        "Origin",
+        "X-Requested-With",
+        "Content-Type",
+        "Accept",
+        "Authorization",
+    ],
 };
 
 app.use(cors(corsOptions));
+
 app.options("*", cors(corsOptions));
 
 /* ===============================
-   IMPORTANT AI BODY LIMIT
+IMPORTANT AI BODY LIMIT
 ================================ */
+
 app.use(express.json({ limit: "25mb" }));
 
 app.use(
-  express.urlencoded({
-    extended: true,
-    limit: "25mb",
-  })
+    express.urlencoded({
+        extended: true,
+        limit: "25mb",
+    })
 );
 
 /* ===============================
-   STATIC FILES
+STATIC FILES
 ================================ */
+
 app.use("/uploads", express.static(uploadsDir));
 
 /* ===============================
-   ROUTES
+ROUTES
 ================================ */
-app.use("/api/social-feed", socialFeedRouter);
 
+app.use("/api/social-feed", socialFeedRouter);
 app.use("/api/hero", heroRouter);
 app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
@@ -126,97 +150,102 @@ app.use("/api/policy", policyRouter);
 app.use("/api/category", categoryRouter);
 app.use("/api/trash", trashRouter);
 app.use("/api/tryon", tryOnRouter);
-/* ===============================
-   AI ROUTES
-================================ */
 app.use("/api/ai", aiRouter);
 
 /* ===============================
-   TEST ROUTES
+TEST ROUTES
 ================================ */
+
 app.get("/", (req, res) => {
-  res.send("API Working");
+    res.json({
+        success: true,
+        message: "Saint Clothing API Working",
+    });
 });
 
 app.get("/api/test", (req, res) => {
-  res.json({
-    success: true,
-    message: "Backend reachable",
-  });
+    res.json({
+        success: true,
+        message: "Backend reachable",
+        origin: req.headers.origin || null,
+    });
 });
 
 app.get("/api/address-check", (req, res) => {
-  res.json({
-    success: true,
-    message: "address route server file is active",
-  });
+    res.json({
+        success: true,
+        message: "address route server file is active",
+    });
 });
 
 app.get("/api/uploads-check", (req, res) => {
-  res.json({
-    success: true,
-    uploadsPath: uploadsDir,
-    paymentProofsPath: paymentProofsDir,
-    avatarsPath: avatarsDir,
-    heroPath: heroDir,
-  });
+    res.json({
+        success: true,
+        uploadsPath: uploadsDir,
+        paymentProofsPath: paymentProofsDir,
+        avatarsPath: avatarsDir,
+        heroPath: heroDir,
+    });
 });
 
 /* ===============================
-   404 HANDLER
+404 HANDLER
 ================================ */
+
 app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Route not found: ${req.method} ${req.originalUrl}`,
-  });
+    res.status(404).json({
+        success: false,
+        message: `Route not found: ${req.method} ${req.originalUrl}`,
+    });
 });
 
 /* ===============================
-   GLOBAL ERROR HANDLER
+GLOBAL ERROR HANDLER
 ================================ */
+
 app.use((err, req, res, next) => {
-  console.log("SERVER ERROR:", err);
+    console.log("SERVER ERROR:", err);
 
-  if (
-    err.message &&
-    err.message.startsWith("CORS blocked for origin:")
-  ) {
-    return res.status(403).json({
-      success: false,
-      message: err.message,
+    if (
+        err.message &&
+        err.message.startsWith("CORS blocked for origin:")
+    ) {
+        return res.status(403).json({
+            success: false,
+            message: err.message,
+        });
+    }
+
+    if (err.type === "entity.too.large") {
+        return res.status(413).json({
+            success: false,
+            message:
+                "Uploaded AI image payload is too large. Try smaller product images.",
+        });
+    }
+
+    res.status(500).json({
+        success: false,
+        message: err.message || "Internal Server Error",
     });
-  }
-
-  if (err.type === "entity.too.large") {
-    return res.status(413).json({
-      success: false,
-      message:
-        "Uploaded AI image payload is too large. Try smaller product images.",
-    });
-  }
-
-  res.status(500).json({
-    success: false,
-    message: err.message || "Internal Server Error",
-  });
 });
 
 /* ===============================
-   START SERVER
+START SERVER
 ================================ */
-const startServer = async () => {
-  try {
-    await connectDB();
-    await connectCloudinary();
 
-    app.listen(port, "0.0.0.0", () => {
-      console.log(`Server running on port ${port}`);
-    });
-  } catch (error) {
-    console.log("SERVER START ERROR:", error.message);
-    process.exit(1);
-  }
+const startServer = async () => {
+    try {
+        await connectDB();
+        await connectCloudinary();
+
+        app.listen(port, "0.0.0.0", () => {
+            console.log(`Server running on port ${port}`);
+        });
+    } catch (error) {
+        console.log("SERVER START ERROR:", error.message);
+        process.exit(1);
+    }
 };
 
 startServer();
