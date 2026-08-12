@@ -1,6 +1,7 @@
 import express from "express";
 import adminAuth from "../middleware/adminAuth.js";
 import upload from "../middleware/multer.js";
+
 import {
   listCategories,
   addCategory,
@@ -13,9 +14,23 @@ import {
 
 const categoryRouter = express.Router();
 
+/* =========================================================
+   PUBLIC
+   Used by mobile app and storefront
+========================================================= */
+
 categoryRouter.get("/list", listCategories);
 
-categoryRouter.post("/add", adminAuth, upload.single("image"), addCategory);
+/* =========================================================
+   ADMIN
+========================================================= */
+
+categoryRouter.post(
+  "/add",
+  adminAuth,
+  upload.single("image"),
+  addCategory
+);
 
 categoryRouter.put(
   "/update/:id",
@@ -24,11 +39,33 @@ categoryRouter.put(
   updateCategory
 );
 
-categoryRouter.post("/delete", adminAuth, deleteCategory);
+categoryRouter.post(
+  "/delete",
+  adminAuth,
+  deleteCategory
+);
 
-/* GLOBAL TRASH SUPPORT */
-categoryRouter.get("/trash", adminAuth, getDeletedCategories);
-categoryRouter.post("/restore", adminAuth, restoreCategory);
-categoryRouter.post("/permanent-delete", adminAuth, permanentDeleteCategory);
+/* =========================================================
+   GLOBAL TRASH SUPPORT
+========================================================= */
+
+categoryRouter.get(
+  "/trash",
+  adminAuth,
+  getDeletedCategories
+);
+
+categoryRouter.post(
+  "/restore",
+  adminAuth,
+  restoreCategory
+);
+
+categoryRouter.post(
+  "/permanent-delete",
+  adminAuth,
+  permanentDeleteCategory
+);
 
 export default categoryRouter;
+

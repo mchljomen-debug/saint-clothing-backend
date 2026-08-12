@@ -49,50 +49,88 @@ const uploadCategoryImage = async (file) => {
   return result.secure_url;
 };
 
+/* =========================================================
+   SEED DEFAULT CATEGORIES
+   Called once during server startup.
+========================================================= */
+
 export const seedDefaultCategories = async () => {
-  for (const item of DEFAULT_CATEGORIES) {
-    const exists = await categoryModel.findOne({
-      name: { $regex: `^${escapeRegex(item.name)}$`, $options: "i" },
-    });
+  try {
+    console.log("Checking default categories...");
 
-    if (!exists) {
-      await categoryModel.create({
-        ...item,
-        isActive: true,
-        isDeleted: false,
-        deletedAt: null,
-        deletedBy: "",
+    for (const item of DEFAULT_CATEGORIES) {
+      const exists = await categoryModel.findOne({
+        name: {
+          $regex: `^${escapeRegex(item.name)}$`,
+          $options: "i",
+        },
       });
-      continue;
+
+      if (!exists) {
+        await categoryModel.create({
+          ...item,
+          image: "",
+          isActive: true,
+          isDeleted: false,
+          deletedAt: null,
+          deletedBy: "",
+        });
+
+        console.log(`Created default category: ${item.name}`);
+        continue;
+      }
+
+      if (exists.isDeleted) {
+        continue;
+      }
+
+      let changed = false;
+
+      if (!exists.section || exists.section === "other") {
+        exists.section = item.section;
+        changed = true;
+      }
+
+      if (
+        !Array.isArray(exists.matchWith) ||
+        exists.matchWith.length === 0
+      ) {
+        exists.matchWith = item.matchWith;
+        changed = true;
+      }
+
+      if (exists.isActive === undefined) {
+        exists.isActive = true;
+        changed = true;
+      }
+
+      if (changed) {
+        await exists.save();
+      }
     }
 
-    if (exists.isDeleted) continue;
-
-    let changed = false;
-
-    if (!exists.section || exists.section === "other") {
-      exists.section = item.section;
-      changed = true;
-    }
-
-    if (!Array.isArray(exists.matchWith) || exists.matchWith.length === 0) {
-      exists.matchWith = item.matchWith;
-      changed = true;
-    }
-
-    if (changed) await exists.save();
+    console.log("Default categories check complete");
+  } catch (error) {
+    console.error("SEED CATEGORIES ERROR:", error);
+    throw error;
   }
 };
 
+/* =========================================================
+   LIST ACTIVE CATEGORIES
+   IMPORTANT:
+   Do NOT seed categories here.
+========================================================= */
+
 export const listCategories = async (req, res) => {
   try {
-    await seedDefaultCategories();
-
     const categories = await categoryModel
       .find({
         isDeleted: { $ne: true },
+        isActive: true,
       })
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: 1 })
+      .lean();
 
     return res.json({
       success: true,
@@ -100,12 +138,17 @@ export const listCategories = async (req, res) => {
     });
   } catch (error) {
     console.error("LIST CATEGORIES ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to load categories",
     });
   }
 };
+
+/* =========================================================
+   ADD CATEGORY
+========================================================= */
 
 export const addCategory = async (req, res) => {
   try {
@@ -131,8 +174,13 @@ export const addCategory = async (req, res) => {
     }
 
     const exists = await categoryModel.findOne({
-      name: { $regex: `^${escapeRegex(cleanName)}$`, $options: "i" },
+      name: {
+        $regex: `^${escapeRegex(cleanName)}$`,
+        $options: "i",
+      },
     });
+
+    /* RESTORE DELETED CATEGORY */
 
     if (exists && exists.isDeleted) {
       exists.isDeleted = false;
@@ -163,6 +211,8 @@ export const addCategory = async (req, res) => {
       });
     }
 
+    /* RESTORE INACTIVE CATEGORY */
+
     if (exists && !exists.isActive) {
       exists.isActive = true;
       exists.isDeleted = false;
@@ -192,6 +242,8 @@ export const addCategory = async (req, res) => {
       });
     }
 
+    /* DUPLICATE CATEGORY */
+
     if (exists) {
       return res.status(400).json({
         success: false,
@@ -199,7 +251,11 @@ export const addCategory = async (req, res) => {
       });
     }
 
-    const image = req.file ? await uploadCategoryImage(req.file) : "";
+    /* CREATE NEW CATEGORY */
+
+    const image = req.file
+      ? await uploadCategoryImage(req.file)
+      : "";
 
     const category = await categoryModel.create({
       name: cleanName,
@@ -227,12 +283,17 @@ export const addCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("ADD CATEGORY ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to add category",
     });
   }
 };
+
+/* =========================================================
+   UPDATE CATEGORY
+========================================================= */
 
 export const updateCategory = async (req, res) => {
   try {
@@ -260,6 +321,24 @@ export const updateCategory = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Category name cannot be empty",
+        });
+      }
+
+      /* Prevent duplicate names */
+
+      const duplicate = await categoryModel.findOne({
+        _id: { $ne: id },
+        name: {
+          $regex: `^${escapeRegex(cleanName)}$`,
+          $options: "i",
+        },
+        isDeleted: { $ne: true },
+      });
+
+      if (duplicate) {
+        return res.status(400).json({
+          success: false,
+          message: "Another category already uses this name",
         });
       }
 
@@ -304,16 +383,28 @@ export const updateCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("UPDATE CATEGORY ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to update category",
     });
   }
 };
 
+/* =========================================================
+   DELETE CATEGORY
+========================================================= */
+
 export const deleteCategory = async (req, res) => {
   try {
     const { id } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required",
+      });
+    }
 
     const category = await categoryModel.findById(id);
 
@@ -353,18 +444,28 @@ export const deleteCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("DELETE CATEGORY ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to delete category",
     });
   }
 };
 
+/* =========================================================
+   GET DELETED CATEGORIES
+========================================================= */
+
 export const getDeletedCategories = async (req, res) => {
   try {
     const categories = await categoryModel
-      .find({ isDeleted: true })
-      .sort({ deletedAt: -1 });
+      .find({
+        isDeleted: true,
+      })
+      .sort({
+        deletedAt: -1,
+      })
+      .lean();
 
     return res.json({
       success: true,
@@ -373,16 +474,28 @@ export const getDeletedCategories = async (req, res) => {
     });
   } catch (error) {
     console.error("GET DELETED CATEGORIES ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to load deleted categories",
     });
   }
 };
 
+/* =========================================================
+   RESTORE CATEGORY
+========================================================= */
+
 export const restoreCategory = async (req, res) => {
   try {
     const { id } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required",
+      });
+    }
 
     const category = await categoryModel.findById(id);
 
@@ -422,16 +535,28 @@ export const restoreCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("RESTORE CATEGORY ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to restore category",
     });
   }
 };
 
+/* =========================================================
+   PERMANENT DELETE CATEGORY
+========================================================= */
+
 export const permanentDeleteCategory = async (req, res) => {
   try {
     const { id } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required",
+      });
+    }
 
     const category = await categoryModel.findById(id);
 
@@ -465,9 +590,12 @@ export const permanentDeleteCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("PERMANENT DELETE CATEGORY ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message:
+        error.message || "Failed to permanently delete category",
     });
   }
 };
+

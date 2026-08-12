@@ -32,59 +32,116 @@ const port = process.env.PORT || 4000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/* ===============================
-LOCAL FILE DIRECTORIES
-================================ */
+/* =========================================================
+   LOCAL FILE DIRECTORIES
+========================================================= */
 
-const uploadsDir = path.join(__dirname, "uploads");
-const paymentProofsDir = path.join(__dirname, "uploads", "payment-proofs");
-const avatarsDir = path.join(__dirname, "uploads", "avatars");
-const heroDir = path.join(__dirname, "uploads", "hero");
+const uploadsDir = path.join(
+    __dirname,
+    "uploads"
+);
 
-[uploadsDir, paymentProofsDir, avatarsDir, heroDir].forEach((dir) => {
+const paymentProofsDir = path.join(
+    __dirname,
+    "uploads",
+    "payment-proofs"
+);
+
+const avatarsDir = path.join(
+    __dirname,
+    "uploads",
+    "avatars"
+);
+
+const heroDir = path.join(
+    __dirname,
+    "uploads",
+    "hero"
+);
+
+[
+    uploadsDir,
+    paymentProofsDir,
+    avatarsDir,
+    heroDir,
+].forEach((dir) => {
     if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        fs.mkdirSync(dir, {
+            recursive: true,
+        });
     }
 });
 
-/* ===============================
-CORS CONFIG
-================================ */
+/* =========================================================
+   CORS CONFIGURATION
+========================================================= */
 
 const allowedOrigins = [
+    // Local web
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
+
+    // Expo / React Native development
     "http://localhost:8081",
     "http://localhost:8082",
 
+    // Vercel
     "https://saint-clothing-frontend.vercel.app",
     "https://saint-clothing-admin.vercel.app",
 
+    // Production domains
     "https://saintclothingbrandph.com",
     "https://www.saintclothingbrandph.com",
     "https://admin.saintclothingbrandph.com",
 
+    // Environment variables
     process.env.FRONTEND_URL,
     process.env.ADMIN_URL,
-].filter(Boolean).map((url) => url.replace(/\/$/, ""));
+]
+    .filter(Boolean)
+    .map((url) =>
+        String(url)
+            .trim()
+            .replace(/\/$/, "")
+    );
+
+console.log(
+    "Allowed CORS origins:",
+    allowedOrigins
+);
 
 const corsOptions = {
     origin: function (origin, callback) {
+        /*
+         * Requests without an Origin header can happen
+         * from Postman, server-to-server requests, etc.
+         */
         if (!origin) {
             return callback(null, true);
         }
 
-        const cleanOrigin = origin.replace(/\/$/, "");
+        const cleanOrigin = String(origin)
+            .trim()
+            .replace(/\/$/, "");
 
-        if (allowedOrigins.includes(cleanOrigin)) {
+        if (
+            allowedOrigins.includes(
+                cleanOrigin
+            )
+        ) {
             return callback(null, true);
         }
 
-        console.log("Blocked by CORS:", origin);
+        console.log(
+            "Blocked by CORS:",
+            origin
+        );
 
         return callback(
-            new Error(`CORS blocked for origin: ${origin}`)
+            new Error(
+                `CORS blocked for origin: ${origin}`
+            )
         );
     },
 
@@ -105,18 +162,42 @@ const corsOptions = {
         "Content-Type",
         "Accept",
         "Authorization",
+        "token",
     ],
+
+    exposedHeaders: [
+        "Authorization",
+        "token",
+    ],
+
+    optionsSuccessStatus: 204,
 };
 
-app.use(cors(corsOptions));
+/*
+ * IMPORTANT:
+ * CORS MUST BE BEFORE THE API ROUTES.
+ */
+app.use(
+    cors(corsOptions)
+);
 
-app.options("*", cors(corsOptions));
+/*
+ * Explicit preflight handler.
+ */
+app.options(
+    "*",
+    cors(corsOptions)
+);
 
-/* ===============================
-IMPORTANT AI BODY LIMIT
-================================ */
+/* =========================================================
+   BODY PARSING
+========================================================= */
 
-app.use(express.json({ limit: "25mb" }));
+app.use(
+    express.json({
+        limit: "25mb",
+    })
+);
 
 app.use(
     express.urlencoded({
@@ -125,125 +206,246 @@ app.use(
     })
 );
 
-/* ===============================
-STATIC FILES
-================================ */
+/* =========================================================
+   STATIC FILES
+========================================================= */
 
-app.use("/uploads", express.static(uploadsDir));
+app.use(
+    "/uploads",
+    express.static(uploadsDir)
+);
 
-/* ===============================
-ROUTES
-================================ */
+/* =========================================================
+   API ROUTES
+========================================================= */
 
-app.use("/api/social-feed", socialFeedRouter);
-app.use("/api/hero", heroRouter);
-app.use("/api/user", userRouter);
-app.use("/api/product", productRouter);
-app.use("/api/cart", cartRouter);
-app.use("/api/admin", adminRouter);
-app.use("/api/branch", branchRouter);
-app.use("/api/activity", activityRoute);
-app.use("/api/order", orderRouter);
-app.use("/api/address", addressRouter);
-app.use("/api/recommendation", recommendationRouter);
-app.use("/api/policy", policyRouter);
-app.use("/api/category", categoryRouter);
-app.use("/api/trash", trashRouter);
-app.use("/api/tryon", tryOnRouter);
-app.use("/api/ai", aiRouter);
+app.use(
+    "/api/social-feed",
+    socialFeedRouter
+);
 
-/* ===============================
-TEST ROUTES
-================================ */
+app.use(
+    "/api/hero",
+    heroRouter
+);
+
+app.use(
+    "/api/user",
+    userRouter
+);
+
+app.use(
+    "/api/product",
+    productRouter
+);
+
+app.use(
+    "/api/cart",
+    cartRouter
+);
+
+app.use(
+    "/api/admin",
+    adminRouter
+);
+
+app.use(
+    "/api/branch",
+    branchRouter
+);
+
+app.use(
+    "/api/activity",
+    activityRoute
+);
+
+app.use(
+    "/api/order",
+    orderRouter
+);
+
+app.use(
+    "/api/address",
+    addressRouter
+);
+
+app.use(
+    "/api/recommendation",
+    recommendationRouter
+);
+
+app.use(
+    "/api/policy",
+    policyRouter
+);
+
+app.use(
+    "/api/category",
+    categoryRouter
+);
+
+app.use(
+    "/api/trash",
+    trashRouter
+);
+
+app.use(
+    "/api/tryon",
+    tryOnRouter
+);
+
+app.use(
+    "/api/ai",
+    aiRouter
+);
+
+/* =========================================================
+   TEST ROUTES
+========================================================= */
 
 app.get("/", (req, res) => {
     res.json({
         success: true,
-        message: "Saint Clothing API Working",
+        message:
+            "Saint Clothing API Working",
     });
 });
 
-app.get("/api/test", (req, res) => {
-    res.json({
-        success: true,
-        message: "Backend reachable",
-        origin: req.headers.origin || null,
-    });
-});
-
-app.get("/api/address-check", (req, res) => {
-    res.json({
-        success: true,
-        message: "address route server file is active",
-    });
-});
-
-app.get("/api/uploads-check", (req, res) => {
-    res.json({
-        success: true,
-        uploadsPath: uploadsDir,
-        paymentProofsPath: paymentProofsDir,
-        avatarsPath: avatarsDir,
-        heroPath: heroDir,
-    });
-});
-
-/* ===============================
-404 HANDLER
-================================ */
-
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        message: `Route not found: ${req.method} ${req.originalUrl}`,
-    });
-});
-
-/* ===============================
-GLOBAL ERROR HANDLER
-================================ */
-
-app.use((err, req, res, next) => {
-    console.log("SERVER ERROR:", err);
-
-    if (
-        err.message &&
-        err.message.startsWith("CORS blocked for origin:")
-    ) {
-        return res.status(403).json({
-            success: false,
-            message: err.message,
+app.get(
+    "/api/test",
+    (req, res) => {
+        res.json({
+            success: true,
+            message:
+                "Backend reachable",
+            origin:
+                req.headers.origin ||
+                null,
         });
     }
+);
 
-    if (err.type === "entity.too.large") {
-        return res.status(413).json({
+app.get(
+    "/api/address-check",
+    (req, res) => {
+        res.json({
+            success: true,
+            message:
+                "address route server file is active",
+        });
+    }
+);
+
+app.get(
+    "/api/uploads-check",
+    (req, res) => {
+        res.json({
+            success: true,
+            uploadsPath:
+                uploadsDir,
+            paymentProofsPath:
+                paymentProofsDir,
+            avatarsPath:
+                avatarsDir,
+            heroPath:
+                heroDir,
+        });
+    }
+);
+
+/* =========================================================
+   404 HANDLER
+========================================================= */
+
+app.use(
+    (req, res) => {
+        res.status(404).json({
             success: false,
             message:
-                "Uploaded AI image payload is too large. Try smaller product images.",
+                `Route not found: ${req.method} ${req.originalUrl}`,
         });
     }
+);
 
-    res.status(500).json({
-        success: false,
-        message: err.message || "Internal Server Error",
-    });
-});
+/* =========================================================
+   GLOBAL ERROR HANDLER
+========================================================= */
 
-/* ===============================
-START SERVER
-================================ */
+app.use(
+    (err, req, res, next) => {
+        console.error(
+            "SERVER ERROR:",
+            err
+        );
+
+        /*
+         * CORS errors
+         */
+        if (
+            err.message &&
+            err.message.startsWith(
+                "CORS blocked for origin:"
+            )
+        ) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    err.message,
+            });
+        }
+
+        /*
+         * Large AI image payload
+         */
+        if (
+            err.type ===
+            "entity.too.large"
+        ) {
+            return res.status(413).json({
+                success: false,
+                message:
+                    "Uploaded AI image payload is too large. Try smaller product images.",
+            });
+        }
+
+        return res.status(500).json({
+            success: false,
+            message:
+                err.message ||
+                "Internal Server Error",
+        });
+    }
+);
+
+/* =========================================================
+   START SERVER
+========================================================= */
 
 const startServer = async () => {
     try {
         await connectDB();
+
         await connectCloudinary();
 
-        app.listen(port, "0.0.0.0", () => {
-            console.log(`Server running on port ${port}`);
-        });
+        app.listen(
+            port,
+            "0.0.0.0",
+            () => {
+                console.log(
+                    `Server running on port ${port}`
+                );
+
+                console.log(
+                    `Port: ${port}`
+                );
+            }
+        );
     } catch (error) {
-        console.log("SERVER START ERROR:", error.message);
+        console.error(
+            "SERVER START ERROR:",
+            error.message
+        );
+
         process.exit(1);
     }
 };
