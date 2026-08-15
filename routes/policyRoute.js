@@ -1,17 +1,38 @@
-  import express from "express";
-  import adminAuth from "../middleware/adminAuth.js";
-  import {
-    getPolicies,
-    getTermsPolicy,
-    getPrivacyPolicy,
-    updatePolicies,
-  } from "../controllers/policyController.js";
+import express from "express";
 
-  const policyRouter = express.Router();
+import adminAuth from "../middleware/adminAuth.js";
 
-  policyRouter.get("/", getPolicies);
-  policyRouter.get("/terms", getTermsPolicy);
-  policyRouter.get("/privacy", getPrivacyPolicy);
-  policyRouter.put("/update", adminAuth, updatePolicies);
+import {
+  getPolicies,
+  getTermsPolicy,
+  getPrivacyPolicy,
+  updatePolicies,
+} from "../controllers/policyController.js";
 
-  export default policyRouter;
+const policyRouter = express.Router();
+
+/*
+|--------------------------------------------------------------------------
+| Public Policy Routes
+|--------------------------------------------------------------------------
+*/
+
+policyRouter.get("/", getPolicies);
+
+policyRouter.get("/terms", getTermsPolicy);
+
+policyRouter.get("/privacy", getPrivacyPolicy);
+
+/*
+|--------------------------------------------------------------------------
+| Admin Policy Routes
+|--------------------------------------------------------------------------
+*/
+
+policyRouter.put(
+  "/update",
+  adminAuth,
+  updatePolicies
+);
+
+export default policyRouter;

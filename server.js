@@ -1,3 +1,12 @@
+import dns from "dns";
+
+// =========================================================
+// MONGODB DNS FIX
+// Your ISP DNS refuses Node.js SRV queries for MongoDB Atlas.
+// Google DNS successfully resolves the MongoDB SRV records.
+// =========================================================
+dns.setServers(["8.8.8.8"]);
+
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
@@ -173,10 +182,10 @@ const corsOptions = {
     optionsSuccessStatus: 204,
 };
 
-/*
- * IMPORTANT:
- * CORS MUST BE BEFORE THE API ROUTES.
- */
+/* =========================================================
+   CORS MIDDLEWARE
+========================================================= */
+
 app.use(
     cors(corsOptions)
 );
