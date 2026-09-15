@@ -1,286 +1,319 @@
-import userModel from "../models/userModel.js";
-import { addLog, getActorName } from "../utils/activityLogger.js";
+import userModel from"../models/userModel.js";
+import{addLog,getActorName}from"../utils/activityLogger.js";
 
-// ==============================
-// NORMALIZE CART DATA
-// ==============================
-const normalizeCartData = (cartData = {}) => {
-  if (!cartData || typeof cartData !== "object" || Array.isArray(cartData)) {
-    return {};
-  }
+const normalizeCartData=(cartData={})=>{
+  if(!cartData||typeof cartData!=="object"||Array.isArray(cartData))return{};
 
-  const normalized = {};
+  const normalized={};
 
-  for (const productId of Object.keys(cartData)) {
-    const sizes = cartData[productId];
+  for(const productId of Object.keys(cartData)){
+    const sizes=cartData[productId];
 
-    if (!sizes || typeof sizes !== "object" || Array.isArray(sizes)) continue;
+    if(!sizes||typeof sizes!=="object"||Array.isArray(sizes))continue;
 
-    normalized[String(productId)] = {};
+    const normalizedProductId=String(productId);
+    normalized[normalizedProductId]={};
 
-    for (const size of Object.keys(sizes)) {
-      const normalizedSize = String(size).toUpperCase();
-      const qty = Number(sizes[size] || 0);
+    for(const size of Object.keys(sizes)){
+      const normalizedSize=String(size).trim().toUpperCase();
+      const qty=Number(sizes[size]);
 
-      if (qty > 0) {
-        normalized[String(productId)][normalizedSize] = qty;
+      if(normalizedSize&&Number.isFinite(qty)&&qty>0){
+        normalized[normalizedProductId][normalizedSize]=qty;
       }
     }
 
-    if (Object.keys(normalized[String(productId)]).length === 0) {
-      delete normalized[String(productId)];
+    if(Object.keys(normalized[normalizedProductId]).length===0){
+      delete normalized[normalizedProductId];
     }
   }
 
   return normalized;
 };
 
-// ==============================
-// ADD TO CART
-// ==============================
-const addToCart = async (req, res) => {
-  try {
-    const { itemId, size, quantity = 1 } = req.body;
-    const userId = req.userId;
+const safeAddLog=async(data)=>{
+  try{
+    await addLog(data);
+  }catch(error){
+    console.log("ACTIVITY LOG ERROR:",error?.message||error);
+  }
+};
 
-    if (!userId) {
+const addToCart=async(req,res)=>{
+  try{
+    const{itemId,size,quantity=1}=req.body;
+    const userId=req.userId;
+
+    if(!userId){
       return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
+        success:false,
+        message:"Unauthorized"
       });
     }
 
-    if (!itemId || !size) {
+    if(!itemId||!size){
       return res.status(400).json({
-        success: false,
-        message: "Item ID and size required",
+        success:false,
+        message:"Item ID and size required"
       });
     }
 
-    const normalizedItemId = String(itemId);
-    const normalizedSize = String(size).toUpperCase();
-    const qtyToAdd = Number(quantity || 1);
+    const normalizedItemId=String(itemId).trim();
+    const normalizedSize=String(size).trim().toUpperCase();
+    const qtyToAdd=Number(quantity);
 
-    if (!Number.isFinite(qtyToAdd) || qtyToAdd <= 0) {
+    if(!normalizedItemId||!normalizedSize){
       return res.status(400).json({
-        success: false,
-        message: "Quantity must be greater than 0",
+        success:false,
+        message:"Invalid item ID or size"
       });
     }
 
-    const userData = await userModel.findById(userId);
+    if(!Number.isFinite(qtyToAdd)||qtyToAdd<=0){
+      return res.status(400).json({
+        success:false,
+        message:"Quantity must be greater than 0"
+      });
+    }
 
-    if (!userData) {
+    const userData=await userModel.findById(userId);
+
+    if(!userData){
       return res.status(404).json({
-        success: false,
-        message: "User not found",
+        success:false,
+        message:"User not found"
       });
     }
 
-    const cartData = normalizeCartData(
-      JSON.parse(JSON.stringify(userData.cartData || {}))
+    const cartData=normalizeCartData(
+      JSON.parse(JSON.stringify(userData.cartData||{}))
     );
 
-    if (!cartData[normalizedItemId]) {
-      cartData[normalizedItemId] = {};
+    if(!cartData[normalizedItemId]){
+      cartData[normalizedItemId]={};
     }
 
-    cartData[normalizedItemId][normalizedSize] =
-      Number(cartData[normalizedItemId][normalizedSize] || 0) + qtyToAdd;
+    const currentQty=Number(cartData[normalizedItemId][normalizedSize]||0);
 
-    userData.cartData = cartData;
+    cartData[normalizedItemId][normalizedSize]=currentQty+qtyToAdd;
+
+    userData.cartData=cartData;
     userData.markModified("cartData");
+
     await userData.save();
 
-    // 🔥 LOG
-    await addLog({
-      action: "CART_ADD",
-      message: `Added to cart: ${normalizedItemId} (${normalizedSize}) x${qtyToAdd}`,
-      user: getActorName(req, "Customer"),
-      entityId: normalizedItemId,
-      entityType: "Cart",
+    await safeAddLog({
+      action:"CART_ADD",
+      message:`Added to cart: ${normalizedItemId} (${normalizedSize}) x${qtyToAdd}`,
+      user:getActorName(req,"Customer"),
+      entityId:normalizedItemId,
+      entityType:"Cart"
     });
 
-    return res.json({
-      success: true,
-      message: "Added to cart",
-      cartData,
+    return res.status(200).json({
+      success:true,
+      message:"Added to cart",
+      cartData
     });
-  } catch (error) {
-    console.log("ADD TO CART ERROR:", error);
+  }catch(error){
+    console.log("ADD TO CART ERROR:",error);
+
     return res.status(500).json({
-      success: false,
-      message: error.message,
+      success:false,
+      message:error.message||"Failed to add item to cart"
     });
   }
 };
 
-// ==============================
-// UPDATE CART
-// ==============================
-const updateCart = async (req, res) => {
-  try {
-    const { itemId, productId, size, quantity } = req.body;
-    const userId = req.userId;
+const updateCart=async(req,res)=>{
+  try{
+    const{itemId,productId,size,quantity}=req.body;
+    const userId=req.userId;
+    const finalItemId=itemId||productId;
 
-    const finalItemId = itemId || productId;
-
-    if (!userId) {
+    if(!userId){
       return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
+        success:false,
+        message:"Unauthorized"
       });
     }
 
-    if (!finalItemId || !size) {
+    if(!finalItemId||!size){
       return res.status(400).json({
-        success: false,
-        message: "Item ID and size required",
+        success:false,
+        message:"Item ID and size required"
       });
     }
 
-    const normalizedItemId = String(finalItemId);
-    const normalizedSize = String(size).toUpperCase();
-    const nextQty = Number(quantity || 0);
+    const normalizedItemId=String(finalItemId).trim();
+    const normalizedSize=String(size).trim().toUpperCase();
+    const nextQty=Number(quantity);
 
-    if (!Number.isFinite(nextQty) || nextQty < 0) {
+    if(!normalizedItemId||!normalizedSize){
       return res.status(400).json({
-        success: false,
-        message: "Quantity must be 0 or greater",
+        success:false,
+        message:"Invalid item ID or size"
       });
     }
 
-    const userData = await userModel.findById(userId);
+    if(!Number.isFinite(nextQty)||nextQty<0){
+      return res.status(400).json({
+        success:false,
+        message:"Quantity must be 0 or greater"
+      });
+    }
 
-    if (!userData) {
+    const userData=await userModel.findById(userId);
+
+    if(!userData){
       return res.status(404).json({
-        success: false,
-        message: "User not found",
+        success:false,
+        message:"User not found"
       });
     }
 
-    const cartData = normalizeCartData(
-      JSON.parse(JSON.stringify(userData.cartData || {}))
+    const cartData=normalizeCartData(
+      JSON.parse(JSON.stringify(userData.cartData||{}))
     );
 
-    if (!cartData[normalizedItemId] && nextQty <= 0) {
-      return res.json({
-        success: true,
-        message: "Cart updated",
-        cartData,
-      });
-    }
+    console.log("=================================");
+    console.log("UPDATE CART");
+    console.log("USER:",String(userId));
+    console.log("ITEM:",normalizedItemId);
+    console.log("SIZE:",normalizedSize);
+    console.log("NEW QUANTITY:",nextQty);
+    console.log("BEFORE:",JSON.stringify(cartData));
+    console.log("=================================");
 
-    if (!cartData[normalizedItemId]) {
-      cartData[normalizedItemId] = {};
-    }
-
-    if (nextQty <= 0) {
-      if (cartData[normalizedItemId][normalizedSize] !== undefined) {
+    if(nextQty===0){
+      if(cartData[normalizedItemId]){
         delete cartData[normalizedItemId][normalizedSize];
+
+        if(Object.keys(cartData[normalizedItemId]).length===0){
+          delete cartData[normalizedItemId];
+        }
+      }
+    }else{
+      if(!cartData[normalizedItemId]){
+        cartData[normalizedItemId]={};
       }
 
-      if (Object.keys(cartData[normalizedItemId]).length === 0) {
-        delete cartData[normalizedItemId];
-      }
-    } else {
-      cartData[normalizedItemId][normalizedSize] = nextQty;
+      cartData[normalizedItemId][normalizedSize]=nextQty;
     }
 
-    userData.cartData = cartData;
+    userData.cartData=cartData;
     userData.markModified("cartData");
+
     await userData.save();
 
-    // 🔥 LOG
-    await addLog({
-      action: "CART_UPDATED",
-      message: `Cart updated: ${normalizedItemId} (${normalizedSize}) → qty ${nextQty}`,
-      user: getActorName(req, "Customer"),
-      entityId: normalizedItemId,
-      entityType: "Cart",
+    console.log("CART SAVED:",JSON.stringify(cartData));
+
+    await safeAddLog({
+      action:"CART_UPDATED",
+      message:`Cart updated: ${normalizedItemId} (${normalizedSize}) → qty ${nextQty}`,
+      user:getActorName(req,"Customer"),
+      entityId:normalizedItemId,
+      entityType:"Cart"
     });
 
-    return res.json({
-      success: true,
-      message: "Cart updated",
-      cartData,
+    return res.status(200).json({
+      success:true,
+      message:"Cart updated",
+      cartData
     });
-  } catch (error) {
-    console.log("UPDATE CART ERROR:", error);
+  }catch(error){
+    console.log("UPDATE CART ERROR:",error);
+
     return res.status(500).json({
-      success: false,
-      message: error.message,
+      success:false,
+      message:error.message||"Failed to update cart"
     });
   }
 };
 
-// ==============================
-// GET USER CART
-// ==============================
-const getUserCart = async (req, res) => {
-  try {
-    const userData = await userModel.findById(req.userId);
+const getUserCart=async(req,res)=>{
+  try{
+    const userId=req.userId;
 
-    if (!userData) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
+    if(!userId){
+      return res.status(401).json({
+        success:false,
+        message:"Unauthorized"
       });
     }
 
-    const cartData = normalizeCartData(userData.cartData || {});
+    const userData=await userModel.findById(userId);
 
-    return res.json({
-      success: true,
-      cartData,
-    });
-  } catch (error) {
-    console.log("GET USER CART ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-// ==============================
-// CLEAR CART
-// ==============================
-const clearCart = async (req, res) => {
-  try {
-    const userData = await userModel.findById(req.userId);
-
-    if (!userData) {
+    if(!userData){
       return res.status(404).json({
-        success: false,
-        message: "User not found",
+        success:false,
+        message:"User not found"
       });
     }
 
-    userData.cartData = {};
-    userData.markModified("cartData");
-    await userData.save();
+    const cartData=normalizeCartData(
+      JSON.parse(JSON.stringify(userData.cartData||{}))
+    );
 
-    // 🔥 LOG (IMPORTANT ONLY)
-    await addLog({
-      action: "CART_CLEARED",
-      message: "User cleared cart",
-      user: getActorName(req, "Customer"),
-      entityType: "Cart",
+    return res.status(200).json({
+      success:true,
+      cartData
     });
+  }catch(error){
+    console.log("GET USER CART ERROR:",error);
 
-    return res.json({
-      success: true,
-      message: "Cart cleared",
-      cartData: {},
-    });
-  } catch (error) {
-    console.log("CLEAR CART ERROR:", error);
     return res.status(500).json({
-      success: false,
-      message: error.message,
+      success:false,
+      message:error.message||"Failed to get cart"
     });
   }
 };
 
-export { addToCart, updateCart, getUserCart, clearCart };
+const clearCart=async(req,res)=>{
+  try{
+    const userId=req.userId;
+
+    if(!userId){
+      return res.status(401).json({
+        success:false,
+        message:"Unauthorized"
+      });
+    }
+
+    const userData=await userModel.findById(userId);
+
+    if(!userData){
+      return res.status(404).json({
+        success:false,
+        message:"User not found"
+      });
+    }
+
+    userData.cartData={};
+    userData.markModified("cartData");
+
+    await userData.save();
+
+    await safeAddLog({
+      action:"CART_CLEARED",
+      message:"User cleared cart",
+      user:getActorName(req,"Customer"),
+      entityType:"Cart"
+    });
+
+    return res.status(200).json({
+      success:true,
+      message:"Cart cleared",
+      cartData:{}
+    });
+  }catch(error){
+    console.log("CLEAR CART ERROR:",error);
+
+    return res.status(500).json({
+      success:false,
+      message:error.message||"Failed to clear cart"
+    });
+  }
+};
+
+export{addToCart,updateCart,getUserCart,clearCart};
