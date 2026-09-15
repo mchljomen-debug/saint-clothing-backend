@@ -98,7 +98,6 @@ const isPreorderMode=(product,sizeKey)=>{
   const actualStock=getStockValue(product,sizeKey);
   const preorderStock=getPreorderValue(product,sizeKey);
   const threshold=Number(product?.preorderThreshold??5);
-
   return product?.preorderEnabled!==false&&actualStock<=threshold&&preorderStock>0;
 };
 
@@ -108,8 +107,28 @@ const shouldShowOrderInLists=(order)=>{
 
   if(method==="COD")return true;
   if(method==="PayMongo")return["pending","paid","failed"].includes(paymentStatus);
-
   return["verifying","paid","failed"].includes(paymentStatus);
+};
+
+const getPaymongoAuthHeaders=()=>({
+  Authorization:"Basic "+Buffer.from(`${process.env.PAYMONGO_SECRET_KEY}:`).toString("base64"),
+  "Content-Type":"application/json"
+});
+
+const getPaymongoPaymentStatus=(payment={})=>{
+  return String(
+    payment?.attributes?.status||
+    payment?.status||
+    ""
+  ).trim().toLowerCase();
+};
+
+const getPaymongoPaymentIntentStatus=(paymentIntent={})=>{
+  return String(
+    paymentIntent?.attributes?.status||
+    paymentIntent?.status||
+    ""
+  ).trim().toLowerCase();
 };
 
 const removeOrderItemsFromCart=async(userId,items=[])=>{
@@ -152,6 +171,7 @@ const removeOrderItemsFromCart=async(userId,items=[])=>{
 
     user.cartData=cartData;
     user.markModified("cartData");
+
     await user.save();
 
     console.log("ORDER CART CLEANUP SUCCESS:",{
@@ -316,6 +336,69 @@ const restoreOrderStock=async(items)=>{
   }
 };
 
+const verifyPaymongoCheckout=async(order)=>{
+  if(!order?.paymongoCheckoutId||!process.env.PAYMONGO_SECRET_KEY){
+    return{
+      paid:false,
+      payment:null,
+      paymentIntent:null
+    };
+  }
+
+  try{
+    const response=await axios.get(
+      `https://api.paymongo.com/v1/checkout_sessions/${order.paymongoCheckoutId}`,
+      {
+        headers:getPaymongoAuthHeaders(),
+        timeout:20000
+      }
+    );
+
+    const checkout=response.data?.data;
+    const attributes=checkout?.attributes||{};
+    const payments=Array.isArray(attributes.payments)?attributes.payments:[];
+    const paymentIntent=attributes.payment_intent||null;
+
+    const paidPayment=payments.find((payment)=>{
+      const status=getPaymongoPaymentStatus(payment);
+      return status==="paid"||status==="succeeded";
+    })||null;
+
+    const paymentIntentStatus=getPaymongoPaymentIntentStatus(paymentIntent);
+
+    const paid=
+      !!paidPayment||
+      paymentIntentStatus==="paid"||
+      paymentIntentStatus==="succeeded";
+
+    console.log("PAYMONGO CHECKOUT VERIFICATION:",{
+      orderId:String(order._id),
+      checkoutId:String(order.paymongoCheckoutId),
+      paymentCount:payments.length,
+      paymentStatuses:payments.map((payment)=>getPaymongoPaymentStatus(payment)),
+      paymentIntentStatus,
+      paid
+    });
+
+    return{
+      paid,
+      payment:paidPayment,
+      paymentIntent
+    };
+  }catch(error){
+    console.error(
+      "PAYMONGO CHECKOUT VERIFICATION ERROR:",
+      error.response?.data||error.message
+    );
+
+    return{
+      paid:false,
+      payment:null,
+      paymentIntent:null
+    };
+  }
+};
+
 const placeOrder=async(req,res)=>{
   try{
     const{userId,items,amount,address,paymentMethod,deliveryEstimate}=req.body;
@@ -430,6 +513,7 @@ const placeOrder=async(req,res)=>{
     });
   }catch(error){
     console.error("ORDER ERROR:",error);
+
     return res.status(error.statusCode||500).json({
       success:false,
       message:error.message
@@ -517,14 +601,19 @@ const createPaymongoCheckout=async(req,res)=>{
         }
       },
       {
-        headers:{
-          Authorization:"Basic "+Buffer.from(`${process.env.PAYMONGO_SECRET_KEY}:`).toString("base64"),
-          "Content-Type":"application/json"
-        }
+        headers:getPaymongoAuthHeaders(),
+        timeout:20000
       }
     );
 
-    const checkoutSession=paymongoResponse.data.data;
+    const checkoutSession=paymongoResponse.data?.data;
+
+    if(!checkoutSession?.id||!checkoutSession?.attributes?.checkout_url){
+      return res.status(500).json({
+        success:false,
+        message:"PayMongo did not return a valid checkout session"
+      });
+    }
 
     order.paymentMethod="PayMongo";
     order.paymentStatus="pending";
@@ -547,11 +636,15 @@ const createPaymongoCheckout=async(req,res)=>{
       checkoutId:checkoutSession.id
     });
   }catch(error){
-    console.error("CREATE PAYMONGO CHECKOUT ERROR:",error.response?.data||error.message);
+    console.error(
+      "CREATE PAYMONGO CHECKOUT ERROR:",
+      error.response?.data||error.message
+    );
 
     return res.status(500).json({
       success:false,
-      message:error.response?.data?.errors?.[0]?.detail||
+      message:
+        error.response?.data?.errors?.[0]?.detail||
         error.response?.data?.errors?.[0]?.message||
         error.message||
         "Failed to create PayMongo checkout"
@@ -560,7 +653,12 @@ const createPaymongoCheckout=async(req,res)=>{
 };
 
 const markOrderAsPaidFromPaymongo=async(order,paymentData={})=>{
-  if(order.payment===true||String(order.paymentStatus||"").toLowerCase()==="paid"){
+  if(!order)return null;
+
+  if(
+    order.payment===true||
+    String(order.paymentStatus||"").toLowerCase()==="paid"
+  ){
     return order;
   }
 
@@ -569,16 +667,36 @@ const markOrderAsPaidFromPaymongo=async(order,paymentData={})=>{
   order.payment=true;
   order.paymentStatus="paid";
   order.status="Order Placed";
-  order.paymongoPaymentId=paymentData?.id||order.paymongoPaymentId||"";
-  order.paymongoPaymentIntentId=
-    paymentData?.attributes?.payment_intent_id||
+
+  const paymentIntent=
     paymentData?.attributes?.payment_intent||
-    order.paymongoPaymentIntentId||
+    paymentData?.attributes?.payment_intent_id||
     "";
+
+  order.paymongoPaymentId=
+    paymentData?.id||
+    order.paymongoPaymentId||
+    "";
+
+  order.paymongoPaymentIntentId=
+    typeof paymentIntent==="string"
+      ?paymentIntent
+      :paymentIntent?.id||
+        order.paymongoPaymentIntentId||
+        "";
 
   await order.save();
 
-  await removeOrderItemsFromCart(order.userId,order.items);
+  const cartCleaned=await removeOrderItemsFromCart(
+    order.userId,
+    order.items
+  );
+
+  console.log("PAYMONGO ORDER MARKED PAID:",{
+    orderId:String(order._id),
+    userId:String(order.userId),
+    cartCleaned
+  });
 
   await addLog({
     action:order.isPreorder?"PREORDER_PAYMONGO_PAID":"ORDER_PAYMONGO_PAID",
@@ -596,7 +714,7 @@ const markOrderAsPaidFromPaymongo=async(order,paymentData={})=>{
 const paymongoWebhook=async(req,res)=>{
   try{
     const event=req.body?.data;
-    const eventType=event?.attributes?.type;
+    const eventType=String(event?.attributes?.type||"").trim();
     const eventData=event?.attributes?.data;
 
     console.log("PAYMONGO WEBHOOK EVENT:",eventType);
@@ -607,10 +725,15 @@ const paymongoWebhook=async(req,res)=>{
       eventData?.attributes?.checkout_session||
       "";
 
-    const paymentIntentId=
+    const rawPaymentIntent=
       eventData?.attributes?.payment_intent_id||
       eventData?.attributes?.payment_intent||
       "";
+
+    const paymentIntentId=
+      typeof rawPaymentIntent==="string"
+        ?rawPaymentIntent
+        :rawPaymentIntent?.id||"";
 
     const metadataOrderId=
       eventData?.attributes?.metadata?.orderId||
@@ -620,11 +743,15 @@ const paymongoWebhook=async(req,res)=>{
     let order=null;
 
     if(checkoutSessionId){
-      order=await orderModel.findOne({paymongoCheckoutId:checkoutSessionId});
+      order=await orderModel.findOne({
+        paymongoCheckoutId:String(checkoutSessionId)
+      });
     }
 
     if(!order&&paymentIntentId){
-      order=await orderModel.findOne({paymongoPaymentIntentId:paymentIntentId});
+      order=await orderModel.findOne({
+        paymongoPaymentIntentId:String(paymentIntentId)
+      });
     }
 
     if(!order&&metadataOrderId){
@@ -632,7 +759,9 @@ const paymongoWebhook=async(req,res)=>{
     }
 
     if(!order&&eventData?.id){
-      order=await orderModel.findOne({paymongoCheckoutId:eventData.id});
+      order=await orderModel.findOne({
+        paymongoCheckoutId:String(eventData.id)
+      });
     }
 
     if(!order){
@@ -640,8 +769,14 @@ const paymongoWebhook=async(req,res)=>{
       return res.json({success:true});
     }
 
-    if(eventType==="checkout_session.payment.paid"||eventType==="payment.paid"){
-      if(order.payment!==true&&String(order.paymentStatus||"").toLowerCase()!=="paid"){
+    if(
+      eventType==="checkout_session.payment.paid"||
+      eventType==="payment.paid"
+    ){
+      if(
+        order.payment!==true&&
+        String(order.paymentStatus||"").toLowerCase()!=="paid"
+      ){
         await markOrderAsPaidFromPaymongo(order,eventData);
       }
     }
@@ -676,7 +811,7 @@ const getPaymentStatus=async(req,res)=>{
       });
     }
 
-    const order=await orderModel.findById(orderId);
+    let order=await orderModel.findById(orderId);
 
     if(!order){
       return res.status(404).json({
@@ -692,6 +827,38 @@ const getPaymentStatus=async(req,res)=>{
       });
     }
 
+    let paid=
+      order.payment===true||
+      String(order.paymentStatus||"").toLowerCase()==="paid";
+
+    if(
+      !paid&&
+      normalizePaymentMethod(order.paymentMethod)==="PayMongo"&&
+      order.paymongoCheckoutId
+    ){
+      const verification=await verifyPaymongoCheckout(order);
+
+      if(verification.paid){
+        console.log(
+          "PAYMONGO API CONFIRMED PAYMENT:",
+          String(order._id)
+        );
+
+        await markOrderAsPaidFromPaymongo(
+          order,
+          verification.payment||
+          verification.paymentIntent||
+          {}
+        );
+
+        order=await orderModel.findById(orderId);
+
+        paid=
+          order?.payment===true||
+          String(order?.paymentStatus||"").toLowerCase()==="paid";
+      }
+    }
+
     return res.json({
       success:true,
       orderId:order._id,
@@ -699,7 +866,7 @@ const getPaymentStatus=async(req,res)=>{
       paymentMethod:normalizePaymentMethod(order.paymentMethod),
       paymentStatus:String(order.paymentStatus||""),
       status:String(order.status||""),
-      paid:order.payment===true||String(order.paymentStatus||"").toLowerCase()==="paid"
+      paid
     });
   }catch(error){
     console.error("GET PAYMENT STATUS ERROR:",error);
@@ -815,7 +982,9 @@ const submitPaymentProof=async(req,res)=>{
       });
     }
 
-    const normalizedPaymentMethod=normalizePaymentMethod(paymentMethod||order.paymentMethod);
+    const normalizedPaymentMethod=normalizePaymentMethod(
+      paymentMethod||order.paymentMethod
+    );
 
     if(!isManualPayment(normalizedPaymentMethod)){
       return res.status(400).json({
@@ -837,8 +1006,6 @@ const submitPaymentProof=async(req,res)=>{
     order.status="Pending Payment";
 
     await order.save();
-
-    await removeOrderItemsFromCart(order.userId,order.items);
 
     await addLog({
       action:"ORDER_PAYMENT_PROOF_SUBMITTED",
@@ -907,6 +1074,11 @@ const approveManualPayment=async(req,res)=>{
 
     await order.save();
 
+    await removeOrderItemsFromCart(
+      order.userId,
+      order.items
+    );
+
     await addLog({
       action:order.isPreorder?"PREORDER_MANUAL_PAYMENT_APPROVED":"ORDER_MANUAL_PAYMENT_APPROVED",
       message:order.isPreorder
@@ -920,8 +1092,8 @@ const approveManualPayment=async(req,res)=>{
     return res.json({
       success:true,
       message:order.isPreorder
-        ?"Manual payment approved and pre-order stock deducted"
-        :"Manual payment approved and stock deducted"
+        ?"Manual payment approved, cart updated and pre-order stock deducted"
+        :"Manual payment approved, cart updated and stock deducted"
     });
   }catch(error){
     console.error("APPROVE MANUAL PAYMENT ERROR:",error);
@@ -1022,7 +1194,10 @@ const userOrders=async(req,res)=>{
       });
     }
 
-    const all=await orderModel.find({userId:finalUserId}).sort({createdAt:-1});
+    const all=await orderModel.find({
+      userId:finalUserId
+    }).sort({createdAt:-1});
+
     const orders=all.filter(shouldShowOrderInLists);
 
     return res.json({
@@ -1129,7 +1304,11 @@ const receiveOrder=async(req,res)=>{
       });
     }
 
-    if(isOnlinePayment(method)&&method!=="COD"&&currentPaymentStatus!=="paid"){
+    if(
+      isOnlinePayment(method)&&
+      method!=="COD"&&
+      currentPaymentStatus!=="paid"
+    ){
       return res.status(400).json({
         success:false,
         message:"Cannot mark as received. Payment is not paid yet."
