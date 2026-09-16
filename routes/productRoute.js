@@ -1,6 +1,5 @@
-import express from "express";
-
-import {
+import express from"express";
+import{
   addProduct,
   listProducts,
   listAdminProducts,
@@ -14,69 +13,65 @@ import {
   deductStock,
   addReview,
   canUserReviewProduct,
-  getInventoryLogs,
-} from "../controllers/productController.js";
+  getInventoryLogs
+}from"../controllers/productController.js";
+import upload from"../middleware/multer.js";
+import adminAuth from"../middleware/adminAuth.js";
+import authUser from"../middleware/auth.js";
+import{adminOnly,adminOrStaff,adminOrManager}from"../middleware/roleMiddleware.js";
 
-import upload from "../middleware/multer.js";
-import adminAuth from "../middleware/adminAuth.js";
-import authUser from "../middleware/auth.js";
+const router=express.Router();
 
-const router = express.Router();
-
-const productUpload = upload.fields([
-  { name: "image1", maxCount: 1 },
-  { name: "image2", maxCount: 1 },
-  { name: "image3", maxCount: 1 },
-  { name: "image4", maxCount: 1 },
-  { name: "sizeChartImage", maxCount: 1 },
-  { name: "model3d", maxCount: 1 },
-  { name: "outfitImage", maxCount: 1 },
+const productUpload=upload.fields([
+  {name:"image1",maxCount:1},
+  {name:"image2",maxCount:1},
+  {name:"image3",maxCount:1},
+  {name:"image4",maxCount:1},
+  {name:"sizeChartImage",maxCount:1},
+  {name:"model3d",maxCount:1},
+  {name:"outfitImage",maxCount:1}
 ]);
 
-// ==============================
-// ADD / UPDATE PRODUCT
-// ==============================
-router.post("/add", adminAuth, productUpload, addProduct);
+router.post(
+  "/add",
+  adminAuth,
+  adminOrStaff,
+  productUpload,
+  addProduct
+);
 
 router.put(
   "/update/:id",
   adminAuth,
+  adminOrStaff,
   productUpload,
   updateProduct
 );
 
-// ==============================
-// INVENTORY / PRE-ORDER STOCK
-// ==============================
 router.put(
   "/update-stock/:id",
   adminAuth,
+  adminOrManager,
   updateStock
 );
 
 router.post(
   "/deduct-stock",
   adminAuth,
+  adminOrManager,
   deductStock
 );
 
-// REAL INVENTORY LOGS
 router.get(
   "/inventory-logs",
   adminAuth,
+  adminOrManager,
   getInventoryLogs
 );
 
-// ==============================
-// PUBLIC PRODUCT
-// ==============================
-router.get("/single/:id", getSingleProduct);
+router.get("/single/:id",getSingleProduct);
+router.get("/list",listProducts);
 
-router.get("/list", listProducts);
-
-// ==============================
-// REVIEWS
-// ==============================
 router.get(
   "/can-review/:id",
   authUser,
@@ -89,39 +84,38 @@ router.post(
   addReview
 );
 
-// ==============================
-// ADMIN PRODUCT
-// ==============================
 router.get(
   "/admin-list",
   adminAuth,
+  adminOrStaff,
   listAdminProducts
 );
 
-// ==============================
-// TRASH / DELETE
-// ==============================
 router.post(
   "/remove",
   adminAuth,
+  adminOnly,
   deleteProduct
 );
 
 router.post(
   "/restore",
   adminAuth,
+  adminOnly,
   restoreProduct
 );
 
 router.post(
   "/permanent-delete",
   adminAuth,
+  adminOnly,
   permanentDelete
 );
 
 router.get(
   "/trash",
   adminAuth,
+  adminOnly,
   listDeletedProducts
 );
 
