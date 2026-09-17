@@ -1,177 +1,85 @@
 import mongoose from "mongoose";
 
-const orderItemSchema = new mongoose.Schema(
-  {
-    productId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "product",
-      required: true,
-    },
-    name: { type: String, required: true },
-    image: { type: String, default: "" },
-    price: { type: Number, required: true },
-    quantity: { type: Number, required: true },
-    size: { type: String, default: "S" },
-    onSale: { type: Boolean, default: false },
-    salePercent: { type: Number, default: 0 },
-    category: { type: String, default: "" },
-    sku: { type: String, default: "" },
-    groupCode: { type: String, default: "" },
+const orderItemSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: "product", required: true },
+  name: { type: String, required: true },
+  image: { type: String, default: "" },
+  price: { type: Number, required: true },
+  quantity: { type: Number, required: true },
+  size: { type: String, default: "S" },
+  branch: { type: String, default: "branch1" },
+  onSale: { type: Boolean, default: false },
+  salePercent: { type: Number, default: 0 },
+  category: { type: String, default: "" },
+  sku: { type: String, default: "" },
+  groupCode: { type: String, default: "" },
+  isPreorder: { type: Boolean, default: false },
+  expectedRestockDate: { type: Date, default: null },
+  preorderNote: { type: String, default: "" }
+}, { _id: false });
 
-    isPreorder: { type: Boolean, default: false },
-    expectedRestockDate: { type: Date, default: null },
-    preorderNote: { type: String, default: "" },
+const orderSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "user", required: true },
+  items: [orderItemSchema],
+  address: {
+    firstName: String,
+    lastName: String,
+    email: String,
+    phone: String,
+    houseUnit: String,
+    street: String,
+    barangay: String,
+    city: String,
+    province: String,
+    region: String,
+    zipcode: String,
+    country: { type: String, default: "Philippines" },
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    psgcRegionCode: String,
+    psgcProvinceCode: String,
+    psgcMunicipalityCode: String,
+    psgcBarangayCode: String
   },
-  { _id: false }
-);
-
-const orderSchema = new mongoose.Schema(
-  {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "user",
-      required: true,
-    },
-
-    items: [orderItemSchema],
-
-    address: {
-      firstName: String,
-      lastName: String,
-      email: String,
-      phone: String,
-      houseUnit: String,
-      street: String,
-      barangay: String,
-      city: String,
-      province: String,
-      region: String,
-      zipcode: String,
-      country: { type: String, default: "Philippines" },
-      latitude: { type: Number, default: null },
-      longitude: { type: Number, default: null },
-      psgcRegionCode: String,
-      psgcProvinceCode: String,
-      psgcMunicipalityCode: String,
-      psgcBarangayCode: String,
-    },
-
-    amount: { type: Number, required: true },
-
-    status: {
-      type: String,
-      default: "Order Placed",
-    },
-
-    paymentMethod: {
-      type: String,
-      enum: ["COD", "GCash", "Maya", "GoTyme", "PayMongo"],
-      default: "COD",
-    },
-
-    paymentStatus: {
-      type: String,
-      enum: ["pending", "verifying", "paid", "failed", "cod_pending"],
-      default: "cod_pending",
-    },
-
-    payment: {
-      type: Boolean,
-      default: false,
-    },
-
-    referenceNumber: {
-      type: String,
-      default: "",
-    },
-
-    paymentProofImage: {
-      type: String,
-      default: "",
-    },
-
-    paymongoCheckoutId: {
-      type: String,
-      default: "",
-    },
-
-    paymongoPaymentIntentId: {
-      type: String,
-      default: "",
-    },
-
-    paymongoPaymentId: {
-      type: String,
-      default: "",
-    },
-
-    courier: {
-      type: String,
-      default: "J&T Express",
-    },
-
-    jntTrackingNumber: {
-      type: String,
-      default: "",
-    },
-
-    jntTrackingUrl: {
-      type: String,
-      default: "",
-    },
-
-    trackingUpdatedAt: {
-      type: Date,
-      default: null,
-    },
-
-    deliveryProofImage: {
-      type: String,
-      default: "",
-    },
-
-    deliveryProofNote: {
-      type: String,
-      default: "",
-    },
-
-    deliveryProofSubmittedAt: {
-      type: Date,
-      default: null,
-    },
-
-    branch: {
-      type: String,
-      default: "branch1",
-    },
-
-    isPreorder: {
-      type: Boolean,
-      default: false,
-    },
-
-    deliveryEstimate: {
-      minDays: { type: Number, default: 0 },
-      maxDays: { type: Number, default: 0 },
-      label: { type: String, default: "" },
-      range: { type: String, default: "" },
-      shipsOn: { type: Date, default: null },
-    },
-
-    preorderShipDate: {
-      type: Date,
-      default: null,
-    },
-
-    date: {
-      type: Number,
-      default: Date.now,
-    },
+  amount: { type: Number, required: true },
+  status: { type: String, default: "Order Placed" },
+  paymentMethod: {
+    type: String,
+    enum: ["COD", "GCash", "Maya", "GoTyme", "PayMongo"],
+    default: "COD"
   },
-  { timestamps: true }
-);
+  paymentStatus: {
+    type: String,
+    enum: ["pending", "verifying", "paid", "failed", "cod_pending"],
+    default: "cod_pending"
+  },
+  payment: { type: Boolean, default: false },
+  referenceNumber: { type: String, default: "" },
+  paymentProofImage: { type: String, default: "" },
+  paymongoCheckoutId: { type: String, default: "" },
+  paymongoPaymentIntentId: { type: String, default: "" },
+  paymongoPaymentId: { type: String, default: "" },
+  courier: { type: String, default: "J&T Express" },
+  jntTrackingNumber: { type: String, default: "" },
+  jntTrackingUrl: { type: String, default: "" },
+  trackingUpdatedAt: { type: Date, default: null },
+  deliveryProofImage: { type: String, default: "" },
+  deliveryProofNote: { type: String, default: "" },
+  deliveryProofSubmittedAt: { type: Date, default: null },
+  branch: { type: String, default: "branch1" },
+  branches: { type: [String], default: [] },
+  isPreorder: { type: Boolean, default: false },
+  deliveryEstimate: {
+    minDays: { type: Number, default: 0 },
+    maxDays: { type: Number, default: 0 },
+    label: { type: String, default: "" },
+    range: { type: String, default: "" },
+    shipsOn: { type: Date, default: null }
+  },
+  preorderShipDate: { type: Date, default: null },
+  date: { type: Number, default: Date.now }
+}, { timestamps: true });
 
-const orderModel =
-  mongoose.models.order || mongoose.model("order", orderSchema);
+const orderModel = mongoose.models.order || mongoose.model("order", orderSchema);
 
 export default orderModel;
