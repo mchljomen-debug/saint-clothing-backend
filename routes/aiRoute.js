@@ -3,9 +3,10 @@ import authUser from"../middleware/auth.js";
 import adminAuth from"../middleware/adminAuth.js";
 import{adminOrManager}from"../middleware/roleMiddleware.js";
 import{
-  generateOutfitSuggestion,
-  generateOutfitImage,
-  generateSalesInsight
+generateOutfitSuggestion,
+generateOutfitImage,
+generateSalesInsight,
+generateInventoryInsight
 }from"../controllers/aiController.js";
 
 const aiRouter=express.Router();
@@ -13,5 +14,6 @@ const aiRouter=express.Router();
 aiRouter.post("/suggest-fit",authUser,generateOutfitSuggestion);
 aiRouter.post("/generate-fit-image",authUser,generateOutfitImage);
 aiRouter.post("/sales-insight",adminAuth,adminOrManager,generateSalesInsight);
+aiRouter.post("/inventory-insight",adminAuth,adminOrManager,generateInventoryInsight);
 
 export default aiRouter;
