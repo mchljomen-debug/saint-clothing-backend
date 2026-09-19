@@ -37,11 +37,14 @@ router.put("/update/:id",adminAuth,adminOrStaff,productUpload,updateProduct);
 router.put("/update-stock/:id",adminAuth,adminOrManager,updateStock);
 router.post("/deduct-stock",adminAuth,adminOrManager,deductStock);
 router.get("/inventory-logs",adminAuth,adminOrManager,getInventoryLogs);
+
 router.get("/single/:id",getSingleProduct);
 router.get("/list",listProducts);
 router.get("/can-review/:id",authUser,canUserReviewProduct);
 router.post("/review/:id",authUser,addReview);
-router.get("/admin-list",adminAuth,adminOrManager,listAdminProducts);
+
+router.get("/admin-list",adminAuth,adminOrStaff,listAdminProducts);
+
 router.post("/remove",adminAuth,adminOnly,deleteProduct);
 router.post("/restore",adminAuth,adminOnly,restoreProduct);
 router.post("/permanent-delete",adminAuth,adminOnly,permanentDelete);
