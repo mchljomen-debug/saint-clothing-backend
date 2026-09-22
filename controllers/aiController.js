@@ -1,92 +1,193 @@
-import"dotenv/config";
-import{GoogleGenAI,Modality}from"@google/genai";
 
-const ai=new GoogleGenAI({apiKey:process.env.GEMINI_API_KEY});
+import "dotenv/config";
+import { GoogleGenAI, Modality } from "@google/genai";
 
-const getResponseText=(response)=>{
-if(typeof response?.text==="string")return response.text.trim();
-const candidates=response?.candidates||response?.response?.candidates||[];
-return(candidates?.[0]?.content?.parts||[]).filter((part)=>typeof part?.text==="string").map((part)=>part.text).join("\n").trim();
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+const getResponseText = response => {
+  if (typeof response?.text === "string") return response.text.trim();
+  const candidates = response?.candidates || response?.response?.candidates || [];
+  return (candidates?.[0]?.content?.parts || [])
+    .filter(part => typeof part?.text === "string")
+    .map(part => part.text)
+    .join("\n")
+    .trim();
 };
 
-const safeNumber=(value)=>{
-const number=Number(value);
-return Number.isFinite(number)?number:0;
+const safeNumber = value => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
 };
 
-export const generateOutfitSuggestion=async(req,res)=>{
-try{
-const{top,bottom,style}=req.body;
-const prompt=`
+const detectImageMimeType = base64 => {
+  const value = String(base64 || "").replace(/\s/g, "");
+
+  if (value.startsWith("iVBORw0KGgo")) return "image/png";
+  if (value.startsWith("/9j/")) return "image/jpeg";
+
+  try {
+    const header = Buffer.from(value.slice(0, 32), "base64");
+    if (
+      header.length >= 12 &&
+      header.toString("ascii", 0, 4) === "RIFF" &&
+      header.toString("ascii", 8, 12) === "WEBP"
+    ) {
+      return "image/webp";
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+};
+
+const prepareImage = (image, label) => {
+  if (!image || typeof image !== "object" || typeof image.data !== "string") {
+    throw new Error(`${label} image data is missing.`);
+  }
+
+  let data = image.data.trim();
+  let declaredMimeType = String(image.mimeType || image.mime_type || "")
+    .toLowerCase()
+    .split(";")[0]
+    .trim();
+
+  const dataUrlMatch = data.match(/^data:([^;,]+);base64,([\s\S]+)$/i);
+
+  if (dataUrlMatch) {
+    declaredMimeType = String(dataUrlMatch[1]).toLowerCase().trim();
+    data = dataUrlMatch[2];
+  }
+
+  data = data.replace(/\s/g, "");
+
+  if (!data || !/^[A-Za-z0-9+/]+={0,2}$/.test(data) || data.length % 4 === 1) {
+    throw new Error(`${label} image contains invalid base64 data.`);
+  }
+
+  const detectedMimeType = detectImageMimeType(data);
+  const supportedMimeTypes = ["image/png", "image/jpeg", "image/webp"];
+
+  if (!detectedMimeType || !supportedMimeTypes.includes(detectedMimeType)) {
+    throw new Error(
+      `${label} image must be a valid PNG, JPEG, or WebP file. Received MIME type: ${declaredMimeType || "unknown"}.`
+    );
+  }
+
+  if (declaredMimeType && declaredMimeType !== detectedMimeType) {
+    console.log(
+      `[AI] ${label} MIME type corrected: ${declaredMimeType} -> ${detectedMimeType}`
+    );
+  }
+
+  console.log(
+    `[AI] ${label}: ${detectedMimeType}, ${Math.round(data.length / 1024)} KB base64`
+  );
+
+  return {
+    inlineData: {
+      mimeType: detectedMimeType,
+      data
+    }
+  };
+};
+
+export const generateOutfitSuggestion = async (req, res) => {
+  try {
+    const { top, bottom, style } = req.body;
+
+    const prompt = `
 You are a professional fashion stylist.
 
 Top:
-${JSON.stringify(top,null,2)}
+${JSON.stringify(top, null, 2)}
 
 Bottom:
-${JSON.stringify(bottom,null,2)}
+${JSON.stringify(bottom, null, 2)}
 
 Style:
-${style||"modern streetwear"}
+${style || "modern streetwear"}
 
 Explain why this outfit works in a modern streetwear fashion style.
 
 Keep response short and clean.
 `;
 
-const response=await ai.models.generateContent({
-model:"gemini-2.5-flash",
-contents:prompt
-});
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt
+    });
 
-return res.json({
-success:true,
-suggestion:getResponseText(response)
-});
-}catch(error){
-console.error("Gemini Text Error:",error);
-return res.status(500).json({
-success:false,
-message:error.message||"AI style analysis failed"
-});
-}
+    return res.json({
+      success: true,
+      suggestion: getResponseText(response)
+    });
+  } catch (error) {
+    console.error("Gemini Text Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "AI style analysis failed"
+    });
+  }
 };
 
-export const generateOutfitImage=async(req,res)=>{
-try{
-if(!process.env.GEMINI_API_KEY){
-return res.status(500).json({
-success:false,
-message:"GEMINI_API_KEY is missing in Render environment variables."
-});
-}
+export const generateOutfitImage = async (req, res) => {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "GEMINI_API_KEY is missing in Render environment variables."
+      });
+    }
 
-const{top,bottom,mannequin,style}=req.body;
+    const { top, bottom, mannequin, style } = req.body || {};
 
-if(!mannequin?.data){
-return res.status(400).json({
-success:false,
-message:"Mannequin image is missing."
-});
-}
+    if (!mannequin?.data) {
+      return res.status(400).json({
+        success: false,
+        message: "Mannequin image is missing."
+      });
+    }
 
-if(!top?.image?.data&&!bottom?.image?.data){
-return res.status(400).json({
-success:false,
-message:"Please select at least one product image."
-});
-}
+    if (!top?.image?.data && !bottom?.image?.data) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select at least one product image."
+      });
+    }
 
-const parts=[
-{
-text:`
+    let mannequinPart;
+    let topPart = null;
+    let bottomPart = null;
+
+    try {
+      mannequinPart = prepareImage(mannequin, "Mannequin");
+
+      if (top?.image?.data) {
+        topPart = prepareImage(top.image, "Top");
+      }
+
+      if (bottom?.image?.data) {
+        bottomPart = prepareImage(bottom.image, "Bottom");
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Invalid outfit image."
+      });
+    }
+
+    const parts = [
+      {
+        text: `
 Create a realistic full-body fashion e-commerce catalog image.
 
 Main goal:
 Make the mannequin naturally wear the selected outfit.
 
 Style direction:
-${style||"modern Saint Clothing streetwear"}
+${style || "modern Saint Clothing streetwear"}
 
 Rules:
 - Use the mannequin image as the base body and pose.
@@ -101,124 +202,126 @@ Rules:
 - No text.
 - No watermark.
 `
-},
-{
-inlineData:{
-mimeType:mannequin.mimeType||"image/png",
-data:mannequin.data
-}
-}
-];
+      },
+      mannequinPart
+    ];
 
-if(top?.image?.data){
-parts.push({
-inlineData:{
-mimeType:top.image.mimeType||"image/png",
-data:top.image.data
-}
-});
-}
+    if (topPart) parts.push(topPart);
+    if (bottomPart) parts.push(bottomPart);
 
-if(bottom?.image?.data){
-parts.push({
-inlineData:{
-mimeType:bottom.image.mimeType||"image/png",
-data:bottom.image.data
-}
-});
-}
+    console.log("[AI] Generating outfit image:", {
+      top: top?.name || "None",
+      bottom: bottom?.name || "None",
+      mannequinMimeType: mannequinPart.inlineData.mimeType,
+      topMimeType: topPart?.inlineData.mimeType || "None",
+      bottomMimeType: bottomPart?.inlineData.mimeType || "None"
+    });
 
-const response=await ai.models.generateContent({
-model:"gemini-2.5-flash-image",
-contents:[{role:"user",parts}],
-config:{
-responseModalities:[Modality.TEXT,Modality.IMAGE]
-}
-});
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-image",
+      contents: [{ role: "user", parts }],
+      config: {
+        responseModalities: [Modality.TEXT, Modality.IMAGE]
+      }
+    });
 
-const candidates=response?.candidates||response?.response?.candidates||[];
-const responseParts=candidates?.[0]?.content?.parts||[];
-let image="";
+    const candidates = response?.candidates || response?.response?.candidates || [];
+    const responseParts = candidates?.[0]?.content?.parts || [];
+    let image = "";
 
-for(const part of responseParts){
-if(part.inlineData?.data){
-image=`data:${part.inlineData.mimeType||"image/png"};base64,${part.inlineData.data}`;
-break;
-}
-}
+    for (const part of responseParts) {
+      if (part.inlineData?.data) {
+        const mimeType = part.inlineData.mimeType || "image/png";
+        image = `data:${mimeType};base64,${part.inlineData.data}`;
+        break;
+      }
+    }
 
-if(!image){
-return res.status(500).json({
-success:false,
-message:"Gemini did not return an image. Your API key may not support image generation."
-});
-}
+    if (!image) {
+      return res.status(500).json({
+        success: false,
+        message: "Gemini did not return an image. Your API key may not support image generation."
+      });
+    }
 
-return res.json({
-success:true,
-image
-});
-}catch(error){
-console.error("Gemini Image Error:",error);
-return res.status(500).json({
-success:false,
-message:error.message||"AI image generation failed",
-details:error.response?.data||null
-});
-}
+    return res.json({
+      success: true,
+      image
+    });
+  } catch (error) {
+    console.error("Gemini Image Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "AI image generation failed",
+      details: error.response?.data || null
+    });
+  }
 };
 
-export const generateSalesInsight=async(req,res)=>{
-try{
-if(!process.env.GEMINI_API_KEY){
-return res.status(500).json({
-success:false,
-message:"GEMINI_API_KEY is missing."
-});
-}
+export const generateSalesInsight = async (req, res) => {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "GEMINI_API_KEY is missing."
+      });
+    }
 
-const{overview,productPerformance,categoryPerformance,lowStockProducts,salesTrend}=req.body||{};
+    const {
+      overview,
+      productPerformance,
+      categoryPerformance,
+      lowStockProducts,
+      salesTrend
+    } = req.body || {};
 
-if(!overview){
-return res.status(400).json({
-success:false,
-message:"Sales overview is required."
-});
-}
+    if (!overview) {
+      return res.status(400).json({
+        success: false,
+        message: "Sales overview is required."
+      });
+    }
 
-const data={
-business:{
-name:"Saint Clothing",
-country:"Philippines"
-},
-currency:{
-code:"PHP",
-symbol:"₱",
-name:"Philippine Peso"
-},
-overview:{
-totalRevenue:safeNumber(overview.totalRevenue),
-totalOrders:safeNumber(overview.totalOrders),
-paidOrders:safeNumber(overview.paidOrders),
-totalUnitsSold:safeNumber(overview.totalUnitsSold),
-netProfit:safeNumber(overview.netProfit),
-netProfitMargin:safeNumber(overview.netProfitMargin),
-totalProducts:safeNumber(overview.totalProducts),
-totalUsers:safeNumber(overview.totalUsers),
-lowStockCount:safeNumber(overview.lowStockCount)
-},
-productPerformance:Array.isArray(productPerformance)?productPerformance.slice(0,40):[],
-categoryPerformance:Array.isArray(categoryPerformance)?categoryPerformance:[],
-lowStockProducts:Array.isArray(lowStockProducts)?lowStockProducts.slice(0,20):[],
-salesTrend:salesTrend||{}
-};
+    const data = {
+      business: {
+        name: "Saint Clothing",
+        country: "Philippines"
+      },
+      currency: {
+        code: "PHP",
+        symbol: "₱",
+        name: "Philippine Peso"
+      },
+      overview: {
+        totalRevenue: safeNumber(overview.totalRevenue),
+        totalOrders: safeNumber(overview.totalOrders),
+        paidOrders: safeNumber(overview.paidOrders),
+        totalUnitsSold: safeNumber(overview.totalUnitsSold),
+        netProfit: safeNumber(overview.netProfit),
+        netProfitMargin: safeNumber(overview.netProfitMargin),
+        totalProducts: safeNumber(overview.totalProducts),
+        totalUsers: safeNumber(overview.totalUsers),
+        lowStockCount: safeNumber(overview.lowStockCount)
+      },
+      productPerformance: Array.isArray(productPerformance)
+        ? productPerformance.slice(0, 40)
+        : [],
+      categoryPerformance: Array.isArray(categoryPerformance)
+        ? categoryPerformance
+        : [],
+      lowStockProducts: Array.isArray(lowStockProducts)
+        ? lowStockProducts.slice(0, 20)
+        : [],
+      salesTrend: salesTrend || {}
+    };
 
-const prompt=`
+    const prompt = `
 You are the professional sales analyst for Saint Clothing, a clothing business operating in the Philippines.
 
 Analyze ONLY the supplied Saint Clothing sales report data below.
 
-${JSON.stringify(data,null,2)}
+${JSON.stringify(data, null, 2)}
 
 CURRENCY RULES:
 - The official currency for this entire report is Philippine Peso.
@@ -272,114 +375,115 @@ The insight should:
 - keep the response around 90 to 150 words
 `;
 
-const response=await ai.models.generateContent({
-model:"gemini-2.5-flash",
-contents:prompt
-});
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt
+    });
 
-let insight=getResponseText(response);
+    let insight = getResponseText(response);
 
-if(!insight){
-return res.status(500).json({
-success:false,
-message:"No sales insight was returned."
-});
-}
+    if (!insight) {
+      return res.status(500).json({
+        success: false,
+        message: "No sales insight was returned."
+      });
+    }
 
-insight=insight
-.replace(/\bUSD\b/gi,"PHP")
-.replace(/\bUS\s+dollars?\b/gi,"Philippine pesos")
-.replace(/\bU\.S\.\s+dollars?\b/gi,"Philippine pesos")
-.replace(/\bdollars?\b/gi,"Philippine pesos")
-.replace(/\$(?=\s?\d)/g,"₱");
+    insight = insight
+      .replace(/\bUSD\b/gi, "PHP")
+      .replace(/\bUS\s+dollars?\b/gi, "Philippine pesos")
+      .replace(/\bU\.S\.\s+dollars?\b/gi, "Philippine pesos")
+      .replace(/\bdollars?\b/gi, "Philippine pesos")
+      .replace(/\$(?=\s?\d)/g, "₱");
 
-return res.json({
-success:true,
-insight,
-currency:{
-code:"PHP",
-symbol:"₱",
-name:"Philippine Peso"
-},
-generatedAt:new Date().toISOString()
-});
-}catch(error){
-console.error("Sales Insight Error:",error);
-return res.status(500).json({
-success:false,
-message:error.message||"Sales insight generation failed",
-details:error.response?.data||null
-});
-}
+    return res.json({
+      success: true,
+      insight,
+      currency: {
+        code: "PHP",
+        symbol: "₱",
+        name: "Philippine Peso"
+      },
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Sales Insight Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Sales insight generation failed",
+      details: error.response?.data || null
+    });
+  }
 };
 
-export const generateInventoryInsight=async(req,res)=>{
-try{
-if(!process.env.GEMINI_API_KEY){
-return res.status(500).json({
-success:false,
-message:"GEMINI_API_KEY is missing."
-});
-}
+export const generateInventoryInsight = async (req, res) => {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "GEMINI_API_KEY is missing."
+      });
+    }
 
-const{overview,products,inventoryLogs}=req.body||{};
+    const { overview, products, inventoryLogs } = req.body || {};
 
-if(!overview){
-return res.status(400).json({
-success:false,
-message:"Inventory overview is required."
-});
-}
+    if (!overview) {
+      return res.status(400).json({
+        success: false,
+        message: "Inventory overview is required."
+      });
+    }
 
-const inventoryProducts=Array.isArray(products)?products.slice(0,100):[];
-const logs=Array.isArray(inventoryLogs)?inventoryLogs.slice(0,100):[];
+    const inventoryProducts = Array.isArray(products) ? products.slice(0, 100) : [];
+    const logs = Array.isArray(inventoryLogs) ? inventoryLogs.slice(0, 100) : [];
 
-const data={
-business:{
-name:"Saint Clothing",
-country:"Philippines"
-},
-overview:{
-totalProducts:safeNumber(overview.totalProducts),
-totalActualUnits:safeNumber(overview.totalActualUnits),
-totalPreorderUnits:safeNumber(overview.totalPreorderUnits),
-healthyProducts:safeNumber(overview.healthyProducts),
-lowStockProducts:safeNumber(overview.lowStockProducts),
-criticalProducts:safeNumber(overview.criticalProducts),
-preorderProducts:safeNumber(overview.preorderProducts),
-outOfStockProducts:safeNumber(overview.outOfStockProducts)
-},
-products:inventoryProducts.map((product)=>({
-name:product?.name||"Unnamed Product",
-sku:product?.sku||"N/A",
-category:product?.category||"Unknown",
-actualStock:safeNumber(product?.actualStock),
-preorderStock:safeNumber(product?.preorderStock),
-status:product?.status||"Unknown",
-stockBySize:product?.stockBySize||{},
-preorderBySize:product?.preorderBySize||{},
-preorderEnabled:product?.preorderEnabled!==false,
-preorderThreshold:safeNumber(product?.preorderThreshold),
-preorderRestockDate:product?.preorderRestockDate||null
-})),
-recentInventoryMovements:logs.map((log)=>({
-productName:log?.productName||"Unknown Product",
-sku:log?.sku||"N/A",
-stockType:log?.stockType||"Actual",
-size:log?.size||"-",
-oldQty:safeNumber(log?.oldQty),
-newQty:safeNumber(log?.newQty),
-difference:safeNumber(log?.difference),
-date:log?.createdAt||log?.updatedAt||null
-}))
-};
+    const data = {
+      business: {
+        name: "Saint Clothing",
+        country: "Philippines"
+      },
+      overview: {
+        totalProducts: safeNumber(overview.totalProducts),
+        totalActualUnits: safeNumber(overview.totalActualUnits),
+        totalPreorderUnits: safeNumber(overview.totalPreorderUnits),
+        healthyProducts: safeNumber(overview.healthyProducts),
+        lowStockProducts: safeNumber(overview.lowStockProducts),
+        criticalProducts: safeNumber(overview.criticalProducts),
+        preorderProducts: safeNumber(overview.preorderProducts),
+        outOfStockProducts: safeNumber(overview.outOfStockProducts)
+      },
+      products: inventoryProducts.map(product => ({
+        name: product?.name || "Unnamed Product",
+        sku: product?.sku || "N/A",
+        category: product?.category || "Unknown",
+        actualStock: safeNumber(product?.actualStock),
+        preorderStock: safeNumber(product?.preorderStock),
+        status: product?.status || "Unknown",
+        stockBySize: product?.stockBySize || {},
+        preorderBySize: product?.preorderBySize || {},
+        preorderEnabled: product?.preorderEnabled !== false,
+        preorderThreshold: safeNumber(product?.preorderThreshold),
+        preorderRestockDate: product?.preorderRestockDate || null
+      })),
+      recentInventoryMovements: logs.map(log => ({
+        productName: log?.productName || "Unknown Product",
+        sku: log?.sku || "N/A",
+        stockType: log?.stockType || "Actual",
+        size: log?.size || "-",
+        oldQty: safeNumber(log?.oldQty),
+        newQty: safeNumber(log?.newQty),
+        difference: safeNumber(log?.difference),
+        date: log?.createdAt || log?.updatedAt || null
+      }))
+    };
 
-const prompt=`
+    const prompt = `
 You are the professional inventory analyst for Saint Clothing, a clothing business operating in the Philippines.
 
 Analyze ONLY the supplied Saint Clothing inventory data below.
 
-${JSON.stringify(data,null,2)}
+${JSON.stringify(data, null, 2)}
 
 Write one concise professional Inventory Insight suitable for the Saint Clothing administrative inventory management page.
 
@@ -395,7 +499,7 @@ The insight should:
 - mention upcoming restock dates only when supplied
 - use recent inventory movements only when they provide useful inventory context
 - prioritize urgent inventory risks
-- provide one or two practical restocking recommendations based only on the supplied inventory data
+- provide one or two practical restocking recommendations based only on the supplied data
 - distinguish actual inventory from pre-order inventory
 - never invent sales information
 - never invent customer demand
@@ -420,31 +524,32 @@ The insight should:
 - keep the response around 90 to 150 words
 `;
 
-const response=await ai.models.generateContent({
-model:"gemini-2.5-flash",
-contents:prompt
-});
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt
+    });
 
-const insight=getResponseText(response);
+    const insight = getResponseText(response);
 
-if(!insight){
-return res.status(500).json({
-success:false,
-message:"No inventory insight was returned."
-});
-}
+    if (!insight) {
+      return res.status(500).json({
+        success: false,
+        message: "No inventory insight was returned."
+      });
+    }
 
-return res.json({
-success:true,
-insight,
-generatedAt:new Date().toISOString()
-});
-}catch(error){
-console.error("Inventory Insight Error:",error);
-return res.status(500).json({
-success:false,
-message:error.message||"Inventory insight generation failed",
-details:error.response?.data||null
-});
-}
+    return res.json({
+      success: true,
+      insight,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Inventory Insight Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Inventory insight generation failed",
+      details: error.response?.data || null
+    });
+  }
 };
