@@ -1,4 +1,3 @@
-
 import "dotenv/config";
 import { GoogleGenAI, Modality } from "@google/genai";
 
@@ -21,23 +20,18 @@ const safeNumber = value => {
 
 const detectImageMimeType = base64 => {
   const value = String(base64 || "").replace(/\s/g, "");
-
   if (value.startsWith("iVBORw0KGgo")) return "image/png";
   if (value.startsWith("/9j/")) return "image/jpeg";
-
   try {
     const header = Buffer.from(value.slice(0, 32), "base64");
     if (
       header.length >= 12 &&
       header.toString("ascii", 0, 4) === "RIFF" &&
       header.toString("ascii", 8, 12) === "WEBP"
-    ) {
-      return "image/webp";
-    }
+    ) return "image/webp";
   } catch {
     return "";
   }
-
   return "";
 };
 
@@ -75,14 +69,10 @@ const prepareImage = (image, label) => {
   }
 
   if (declaredMimeType && declaredMimeType !== detectedMimeType) {
-    console.log(
-      `[AI] ${label} MIME type corrected: ${declaredMimeType} -> ${detectedMimeType}`
-    );
+    console.log(`[AI] ${label} MIME type corrected: ${declaredMimeType} -> ${detectedMimeType}`);
   }
 
-  console.log(
-    `[AI] ${label}: ${detectedMimeType}, ${Math.round(data.length / 1024)} KB base64`
-  );
+  console.log(`[AI] ${label}: ${detectedMimeType}, ${Math.round(data.length / 1024)} KB base64`);
 
   return {
     inlineData: {
@@ -124,7 +114,6 @@ Keep response short and clean.
     });
   } catch (error) {
     console.error("Gemini Text Error:", error);
-
     return res.status(500).json({
       success: false,
       message: error.message || "AI style analysis failed"
@@ -163,14 +152,8 @@ export const generateOutfitImage = async (req, res) => {
 
     try {
       mannequinPart = prepareImage(mannequin, "Mannequin");
-
-      if (top?.image?.data) {
-        topPart = prepareImage(top.image, "Top");
-      }
-
-      if (bottom?.image?.data) {
-        bottomPart = prepareImage(bottom.image, "Bottom");
-      }
+      if (top?.image?.data) topPart = prepareImage(top.image, "Top");
+      if (bottom?.image?.data) bottomPart = prepareImage(bottom.image, "Bottom");
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -181,26 +164,53 @@ export const generateOutfitImage = async (req, res) => {
     const parts = [
       {
         text: `
-Create a realistic full-body fashion e-commerce catalog image.
+Create one realistic Saint Clothing fashion e-commerce catalog image using the supplied mannequin and selected clothing images.
 
-Main goal:
-Make the mannequin naturally wear the selected outfit.
+PRIMARY REQUIREMENT — COMPLETE HEAD-TO-TOE FRAMING:
+- The final image must show the ENTIRE mannequin, from the highest point of its head to the lowest point of BOTH feet.
+- The head, neck, shoulders, arms, hands, torso, hips, legs, ankles and both feet must be fully visible.
+- Do not cut off the head, feet, hands or any other part of the mannequin.
+- Use a portrait-oriented, full-length fashion catalog composition.
+- Position the camera far enough away to capture the mannequin's complete body.
+- Zoom OUT rather than zooming in.
+- Leave visible empty background above the head, below both feet, and on both sides of the body.
+- Keep the complete mannequin centered horizontally and vertically.
+- The mannequin should occupy approximately 80 to 85 percent of the final image height.
+- Reserve approximately 7 to 10 percent of the image height as clear background above the head.
+- Reserve approximately 7 to 10 percent of the image height as clear background below the feet.
+- Both feet must remain entirely inside the image boundaries.
+- Never use a close-up, medium shot, waist-up shot, knee-up shot, cropped portrait or partial-body composition.
+- If the composition is too tight, move the virtual camera backward and make the mannequin smaller instead of cropping any body part.
 
-Style direction:
-${style || "modern Saint Clothing streetwear"}
+MANNEQUIN AND POSE:
+- Use the supplied mannequin image as the primary reference for the body, standing pose, orientation and proportions.
+- Keep the mannequin upright in a natural, straight standing position.
+- Preserve its original body proportions and overall appearance.
+- Keep both arms, both hands, both legs and both feet visible.
+- Do not create another mannequin, another person or additional body parts.
 
-Rules:
-- Use the mannequin image as the base body and pose.
-- Make the selected top look naturally worn on the mannequin.
-- Make the selected bottom look naturally worn on the mannequin.
-- Preserve the product colors, graphics, logos, texture, and silhouette.
-- Centered full-body product catalog photo.
-- Clean black studio background.
-- No extra models.
-- No extra clothes.
-- No floating clothes.
-- No text.
-- No watermark.
+SELECTED CLOTHING:
+${topPart ? "- Dress the mannequin in the supplied selected top." : "- Do not invent a selected top."}
+${bottomPart ? "- Dress the mannequin in the supplied selected bottom." : "- Do not invent a selected bottom."}
+- Make the selected garments look naturally worn on the mannequin.
+- Preserve the supplied garments' original colors, graphics, logos, text, artwork, patterns, fabric appearance, sleeve length, garment length and silhouette as closely as possible.
+- Keep the clothing designs clearly recognizable.
+- Do not substitute the selected products with similar garments.
+- Do not place floating clothes beside the mannequin.
+- Do not add extra garments or accessories.
+
+STYLE DIRECTION:
+${style || "Modern Saint Clothing streetwear."}
+
+BACKGROUND AND OUTPUT:
+- Use a clean black professional fashion e-commerce studio background.
+- Use soft, even studio lighting.
+- Keep the entire mannequin clearly separated from the background.
+- Output one complete, centered, full-length catalog image.
+- No text overlays, watermark, additional people or additional mannequins.
+
+FINAL COMPOSITION CHECK:
+Before completing the image, ensure that there is visible background ABOVE the entire head and BELOW both complete feet. The full mannequin must fit inside the image without any body part touching or crossing its edges.
 `
       },
       mannequinPart
@@ -250,7 +260,6 @@ Rules:
     });
   } catch (error) {
     console.error("Gemini Image Error:", error);
-
     return res.status(500).json({
       success: false,
       message: error.message || "AI image generation failed",
@@ -408,7 +417,6 @@ The insight should:
     });
   } catch (error) {
     console.error("Sales Insight Error:", error);
-
     return res.status(500).json({
       success: false,
       message: error.message || "Sales insight generation failed",
@@ -499,7 +507,7 @@ The insight should:
 - mention upcoming restock dates only when supplied
 - use recent inventory movements only when they provide useful inventory context
 - prioritize urgent inventory risks
-- provide one or two practical restocking recommendations based only on the supplied data
+- provide one or two practical restocking recommendations based only on the supplied inventory data
 - distinguish actual inventory from pre-order inventory
 - never invent sales information
 - never invent customer demand
@@ -545,7 +553,6 @@ The insight should:
     });
   } catch (error) {
     console.error("Inventory Insight Error:", error);
-
     return res.status(500).json({
       success: false,
       message: error.message || "Inventory insight generation failed",
