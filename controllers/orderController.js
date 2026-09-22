@@ -1,3 +1,4 @@
+
 import axios from "axios";
 import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
@@ -509,36 +510,103 @@ const placeOrder = async (req, res) => {
 
 const createPaymongoCheckout = async (req, res) => {
   try {
-    const { orderId } = req.body;
+    const { orderId, platform } = req.body;
     const authUserId = req.userId || req.user?.id || req.user?._id;
 
     if (!process.env.PAYMONGO_SECRET_KEY) {
-      return res.status(500).json({ success: false, message: "PAYMONGO_SECRET_KEY is missing in backend .env" });
+      return res.status(500).json({
+        success: false,
+        message: "PAYMONGO_SECRET_KEY is missing in backend .env"
+      });
     }
 
     if (!process.env.FRONTEND_URL) {
-      return res.status(500).json({ success: false, message: "FRONTEND_URL is missing in backend .env" });
+      return res.status(500).json({
+        success: false,
+        message: "FRONTEND_URL is missing in backend .env"
+      });
+    }
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required"
+      });
     }
 
     const order = await orderModel.findById(orderId);
 
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
 
     if (!authUserId || String(order.userId) !== String(authUserId)) {
-      return res.status(403).json({ success: false, message: "Unauthorized access to this order" });
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized access to this order"
+      });
+    }
+
+    if (normalizePaymentMethod(order.paymentMethod) !== "PayMongo") {
+      return res.status(400).json({
+        success: false,
+        message: "This order does not use PayMongo"
+      });
     }
 
     if (order.paymentStatus === "paid" || order.payment === true) {
-      return res.status(400).json({ success: false, message: "This order is already paid" });
+      return res.status(400).json({
+        success: false,
+        message: "This order is already paid"
+      });
+    }
+
+    if (order.status === "Cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "This order has been cancelled"
+      });
     }
 
     const amountInCentavos = Math.round(Number(order.amount || 0) * 100);
 
-    if (amountInCentavos < 100) {
-      return res.status(400).json({ success: false, message: "Invalid PayMongo amount" });
+    if (!Number.isFinite(amountInCentavos) || amountInCentavos < 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid PayMongo amount"
+      });
     }
 
     const frontendUrl = String(process.env.FRONTEND_URL).replace(/\/+$/, "");
+    const isMobile = String(platform || "").trim().toLowerCase() === "mobile";
+    const mobileReturnUrl = String(process.env.MOBILE_PAYMENT_RETURN_URL || "").replace(/\/+$/, "");
+
+    if (isMobile && !mobileReturnUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "MOBILE_PAYMENT_RETURN_URL is missing in backend .env"
+      });
+    }
+
+    if (isMobile && !/^https:\/\//i.test(mobileReturnUrl)) {
+      return res.status(500).json({
+        success: false,
+        message: "MOBILE_PAYMENT_RETURN_URL must be an HTTPS URL"
+      });
+    }
+
+    const orderQuery = `orderId=${encodeURIComponent(String(order._id))}`;
+
+    const successUrl = isMobile
+      ? `${mobileReturnUrl}?${orderQuery}&method=PayMongo&payment=return`
+      : `${frontendUrl}/payment-submitted?${orderQuery}`;
+
+    const cancelUrl = isMobile
+      ? `${mobileReturnUrl}?${orderQuery}&method=PayMongo&payment=cancelled`
+      : `${frontendUrl}/orders?payment=cancelled&${orderQuery}`;
 
     const paymongoResponse = await axios.post(
       "https://api.paymongo.com/v1/checkout_sessions",
@@ -556,8 +624,8 @@ const createPaymongoCheckout = async (req, res) => {
               quantity: 1
             }],
             payment_method_types: ["gcash", "paymaya", "card"],
-            success_url: `${frontendUrl}/payment-submitted?orderId=${order._id}`,
-            cancel_url: `${frontendUrl}/orders?payment=cancelled&orderId=${order._id}`,
+            success_url: successUrl,
+            cancel_url: cancelUrl,
             metadata: { orderId: String(order._id) }
           }
         }
@@ -568,7 +636,10 @@ const createPaymongoCheckout = async (req, res) => {
     const checkoutSession = paymongoResponse.data?.data;
 
     if (!checkoutSession?.id || !checkoutSession?.attributes?.checkout_url) {
-      return res.status(500).json({ success: false, message: "PayMongo did not return a valid checkout session" });
+      return res.status(500).json({
+        success: false,
+        message: "PayMongo did not return a valid checkout session"
+      });
     }
 
     order.paymentMethod = "PayMongo";
@@ -595,7 +666,10 @@ const createPaymongoCheckout = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error.response?.data?.errors?.[0]?.detail || error.response?.data?.errors?.[0]?.message || error.message || "Failed to create PayMongo checkout"
+      message: error.response?.data?.errors?.[0]?.detail ||
+        error.response?.data?.errors?.[0]?.message ||
+        error.message ||
+        "Failed to create PayMongo checkout"
     });
   }
 };
@@ -667,7 +741,17 @@ const paymongoWebhook = async (req, res) => {
 
     if (eventType === "checkout_session.payment.paid" || eventType === "payment.paid") {
       if (order.payment !== true && String(order.paymentStatus || "").toLowerCase() !== "paid") {
-        await markOrderAsPaidFromPaymongo(order, eventData);
+        const verification = await verifyPaymongoCheckout(order);
+
+        if (!verification.paid) {
+          console.warn("PAYMONGO WEBHOOK: Payment not confirmed by PayMongo API", String(order._id));
+          return res.json({ success: true, verified: false });
+        }
+
+        await markOrderAsPaidFromPaymongo(
+          order,
+          verification.payment || verification.paymentIntent || {}
+        );
       }
     }
 
@@ -702,7 +786,10 @@ const getPaymentStatus = async (req, res) => {
       if (verification.paid) {
         console.log("PAYMONGO API CONFIRMED PAYMENT:", String(order._id));
 
-        await markOrderAsPaidFromPaymongo(order, verification.payment || verification.paymentIntent || {});
+        await markOrderAsPaidFromPaymongo(
+          order,
+          verification.payment || verification.paymentIntent || {}
+        );
 
         order = await orderModel.findById(orderId);
         paid = order?.payment === true || String(order?.paymentStatus || "").toLowerCase() === "paid";
